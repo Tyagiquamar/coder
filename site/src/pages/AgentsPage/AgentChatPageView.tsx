@@ -449,12 +449,20 @@ export const AgentChatPageView: FC<AgentChatPageViewProps> = ({
 	};
 
 	// Write-through setters keep persistence in event handlers, so the
-	// defaults are never written to storage on mount.
-	const updateUserRightPanelTabs = (next: UserRightPanelTab[]) => {
-		setUserRightPanelTabsState(next);
-		if (!isArchived) {
-			savePersistedRightPanelTabs(agentId, next);
-		}
+	// defaults are never written to storage on mount. Persisting inside
+	// the state updater keeps consecutive updates composing from the
+	// latest tabs instead of a stale render closure; the storage write
+	// is idempotent, so a replayed updater is harmless.
+	const updateUserRightPanelTabs = (
+		updater: (tabs: UserRightPanelTab[]) => UserRightPanelTab[],
+	) => {
+		setUserRightPanelTabsState((tabs) => {
+			const next = updater(tabs);
+			if (!isArchived) {
+				savePersistedRightPanelTabs(agentId, next);
+			}
+			return next;
+		});
 	};
 
 	const updateDefaultTerminalHidden = (hidden: boolean) => {
@@ -610,8 +618,8 @@ export const AgentChatPageView: FC<AgentChatPageViewProps> = ({
 			return;
 		}
 		const tabId = createUserRightPanelTabId("terminal");
-		updateUserRightPanelTabs([
-			...userRightPanelTabs,
+		updateUserRightPanelTabs((tabs) => [
+			...tabs,
 			{
 				id: tabId,
 				kind: "terminal",
@@ -642,7 +650,7 @@ export const AgentChatPageView: FC<AgentChatPageViewProps> = ({
 			agentId: workspaceAgent.id,
 			appId: app.id,
 		};
-		updateUserRightPanelTabs([...userRightPanelTabs, tab]);
+		updateUserRightPanelTabs((tabs) => [...tabs, tab]);
 		activateRightPanelTab(tab.id);
 	};
 
@@ -665,7 +673,7 @@ export const AgentChatPageView: FC<AgentChatPageViewProps> = ({
 			initialCommand: app.command,
 			sourceAppId: app.id,
 		};
-		updateUserRightPanelTabs([...userRightPanelTabs, tab]);
+		updateUserRightPanelTabs((tabs) => [...tabs, tab]);
 		startPendingTab(tab.id);
 	};
 
@@ -692,7 +700,7 @@ export const AgentChatPageView: FC<AgentChatPageViewProps> = ({
 			port: selection.port,
 			protocol: selection.protocol,
 		};
-		updateUserRightPanelTabs([...userRightPanelTabs, tab]);
+		updateUserRightPanelTabs((tabs) => [...tabs, tab]);
 		activateRightPanelTab(tab.id);
 	};
 
@@ -794,8 +802,8 @@ export const AgentChatPageView: FC<AgentChatPageViewProps> = ({
 		if (tabId === "terminal") {
 			updateDefaultTerminalHidden(true);
 		} else {
-			updateUserRightPanelTabs(
-				userRightPanelTabs.filter((tab) => tab.id !== tabId),
+			updateUserRightPanelTabs((tabs) =>
+				tabs.filter((tab) => tab.id !== tabId),
 			);
 		}
 
