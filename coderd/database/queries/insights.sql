@@ -154,23 +154,17 @@ WITH
 			template_id,
 			user_id,
 			date_trunc('minute', created_at) AS minute,
-			BOOL_OR((session_counts ->> 'ssh')::bigint > 0) AS ssh,
-			BOOL_OR((session_counts ->> 'reconnecting_pty')::bigint > 0) AS reconnecting_pty,
-			BOOL_OR((session_counts ->> 'vscode')::bigint > 0) AS vscode,
-			BOOL_OR((session_counts ->> 'jetbrains')::bigint > 0) AS jetbrains,
+			BOOL_OR(session_counts ?| @ssh_apps::text[]) AS ssh,
+			BOOL_OR(session_counts ?| @reconnecting_pty_apps::text[]) AS reconnecting_pty,
+			BOOL_OR(session_counts ?| @vscode_apps::text[]) AS vscode,
+			BOOL_OR(session_counts ?| @jetbrains_apps::text[]) AS jetbrains,
 			BOOL_OR(connection_count > 0) AS has_connection
 		FROM
 			workspace_agent_stats
 		WHERE
 			created_at >= @start_time::timestamptz
 			AND created_at < @end_time::timestamptz
-			-- Inclusion criteria to filter out empty results.
-			AND (
-				(session_counts ->> 'ssh')::bigint > 0
-				OR (session_counts ->> 'reconnecting_pty')::bigint > 0
-				OR (session_counts ->> 'vscode')::bigint > 0
-				OR (session_counts ->> 'jetbrains')::bigint > 0
-			)
+			AND session_counts <> '{}'::jsonb
 		GROUP BY
 			template_id, user_id, minute
 	),
@@ -568,10 +562,10 @@ WITH
 			user_id,
 			-- Store each unique minute bucket for later merge between datasets.
 			array_agg(DISTINCT date_trunc('minute', created_at)) AS minute_buckets,
-			COUNT(DISTINCT CASE WHEN (session_counts ->> 'ssh')::bigint > 0 THEN date_trunc('minute', created_at) ELSE NULL END) AS ssh_mins,
-			COUNT(DISTINCT CASE WHEN (session_counts ->> 'reconnecting_pty')::bigint > 0 THEN date_trunc('minute', created_at) ELSE NULL END) AS reconnecting_pty_mins,
-			COUNT(DISTINCT CASE WHEN (session_counts ->> 'vscode')::bigint > 0 THEN date_trunc('minute', created_at) ELSE NULL END) AS vscode_mins,
-			COUNT(DISTINCT CASE WHEN (session_counts ->> 'jetbrains')::bigint > 0 THEN date_trunc('minute', created_at) ELSE NULL END) AS jetbrains_mins,
+			COUNT(DISTINCT CASE WHEN session_counts ?| @ssh_apps::text[] THEN date_trunc('minute', created_at) ELSE NULL END) AS ssh_mins,
+			COUNT(DISTINCT CASE WHEN session_counts ?| @reconnecting_pty_apps::text[] THEN date_trunc('minute', created_at) ELSE NULL END) AS reconnecting_pty_mins,
+			COUNT(DISTINCT CASE WHEN session_counts ?| @vscode_apps::text[] THEN date_trunc('minute', created_at) ELSE NULL END) AS vscode_mins,
+			COUNT(DISTINCT CASE WHEN session_counts ?| @jetbrains_apps::text[] THEN date_trunc('minute', created_at) ELSE NULL END) AS jetbrains_mins,
 			-- NOTE(mafredri): The agent stats are currently very unreliable, and
 			-- sometimes the connections are missing, even during active sessions.
 			-- Since we can't fully rely on this, we check for "any connection
@@ -584,13 +578,7 @@ WITH
 			-- AND created_at < @end_time::timestamptz
 			created_at >= (SELECT t FROM latest_start)
 			AND created_at < NOW()
-			-- Inclusion criteria to filter out empty results.
-			AND (
-				(session_counts ->> 'ssh')::bigint > 0
-				OR (session_counts ->> 'reconnecting_pty')::bigint > 0
-				OR (session_counts ->> 'vscode')::bigint > 0
-				OR (session_counts ->> 'jetbrains')::bigint > 0
-			)
+			AND session_counts <> '{}'::jsonb
 		GROUP BY
 			time_bucket, template_id, user_id
 	),

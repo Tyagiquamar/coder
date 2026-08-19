@@ -84,10 +84,10 @@ SELECT
 	-- The greater than 0 is to support legacy agents that don't report connection_median_latency_ms.
 	coalesce((PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY connection_median_latency_ms) FILTER (WHERE connection_median_latency_ms > 0)), -1)::FLOAT AS workspace_connection_latency_50,
 	coalesce((PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY connection_median_latency_ms) FILTER (WHERE connection_median_latency_ms > 0)), -1)::FLOAT AS workspace_connection_latency_95,
-	coalesce(SUM((session_counts ->> 'vscode')::bigint) FILTER (WHERE rn = 1), 0)::bigint AS session_count_vscode,
-	coalesce(SUM((session_counts ->> 'ssh')::bigint) FILTER (WHERE rn = 1), 0)::bigint AS session_count_ssh,
-	coalesce(SUM((session_counts ->> 'jetbrains')::bigint) FILTER (WHERE rn = 1), 0)::bigint AS session_count_jetbrains,
-	coalesce(SUM((session_counts ->> 'reconnecting_pty')::bigint) FILTER (WHERE rn = 1), 0)::bigint AS session_count_reconnecting_pty
+	coalesce(SUM((SELECT coalesce(SUM((stats.session_counts ->> app)::bigint), 0) FROM unnest(@vscode_apps::text[]) AS app)) FILTER (WHERE rn = 1), 0)::bigint AS session_count_vscode,
+	coalesce(SUM((SELECT coalesce(SUM((stats.session_counts ->> app)::bigint), 0) FROM unnest(@ssh_apps::text[]) AS app)) FILTER (WHERE rn = 1), 0)::bigint AS session_count_ssh,
+	coalesce(SUM((SELECT coalesce(SUM((stats.session_counts ->> app)::bigint), 0) FROM unnest(@jetbrains_apps::text[]) AS app)) FILTER (WHERE rn = 1), 0)::bigint AS session_count_jetbrains,
+	coalesce(SUM((SELECT coalesce(SUM((stats.session_counts ->> app)::bigint), 0) FROM unnest(@reconnecting_pty_apps::text[]) AS app)) FILTER (WHERE rn = 1), 0)::bigint AS session_count_reconnecting_pty
 FROM stats;
 
 -- name: GetDeploymentWorkspaceAgentUsageStats :one
@@ -117,10 +117,10 @@ latest_minutes AS (
 ),
 latest_agent_stats AS (
 	SELECT
-		coalesce(SUM((stats.session_counts ->> 'vscode')::bigint), 0)::bigint AS session_count_vscode,
-		coalesce(SUM((stats.session_counts ->> 'ssh')::bigint), 0)::bigint AS session_count_ssh,
-		coalesce(SUM((stats.session_counts ->> 'jetbrains')::bigint), 0)::bigint AS session_count_jetbrains,
-		coalesce(SUM((stats.session_counts ->> 'reconnecting_pty')::bigint), 0)::bigint AS session_count_reconnecting_pty
+		coalesce(SUM((SELECT coalesce(SUM((stats.session_counts ->> app)::bigint), 0) FROM unnest(@vscode_apps::text[]) AS app)), 0)::bigint AS session_count_vscode,
+		coalesce(SUM((SELECT coalesce(SUM((stats.session_counts ->> app)::bigint), 0) FROM unnest(@ssh_apps::text[]) AS app)), 0)::bigint AS session_count_ssh,
+		coalesce(SUM((SELECT coalesce(SUM((stats.session_counts ->> app)::bigint), 0) FROM unnest(@jetbrains_apps::text[]) AS app)), 0)::bigint AS session_count_jetbrains,
+		coalesce(SUM((SELECT coalesce(SUM((stats.session_counts ->> app)::bigint), 0) FROM unnest(@reconnecting_pty_apps::text[]) AS app)), 0)::bigint AS session_count_reconnecting_pty
 	FROM
 		latest_minutes
 	JOIN
@@ -153,10 +153,10 @@ WITH agent_stats AS (
 ), latest_agent_stats AS (
 	SELECT
 		a.agent_id,
-		coalesce(SUM((a.session_counts ->> 'vscode')::bigint), 0)::bigint AS session_count_vscode,
-		coalesce(SUM((a.session_counts ->> 'ssh')::bigint), 0)::bigint AS session_count_ssh,
-		coalesce(SUM((a.session_counts ->> 'jetbrains')::bigint), 0)::bigint AS session_count_jetbrains,
-		coalesce(SUM((a.session_counts ->> 'reconnecting_pty')::bigint), 0)::bigint AS session_count_reconnecting_pty
+		coalesce(SUM((SELECT coalesce(SUM((a.session_counts ->> app)::bigint), 0) FROM unnest(@vscode_apps::text[]) AS app)), 0)::bigint AS session_count_vscode,
+		coalesce(SUM((SELECT coalesce(SUM((a.session_counts ->> app)::bigint), 0) FROM unnest(@ssh_apps::text[]) AS app)), 0)::bigint AS session_count_ssh,
+		coalesce(SUM((SELECT coalesce(SUM((a.session_counts ->> app)::bigint), 0) FROM unnest(@jetbrains_apps::text[]) AS app)), 0)::bigint AS session_count_jetbrains,
+		coalesce(SUM((SELECT coalesce(SUM((a.session_counts ->> app)::bigint), 0) FROM unnest(@reconnecting_pty_apps::text[]) AS app)), 0)::bigint AS session_count_reconnecting_pty
 	 FROM (
 		SELECT *, ROW_NUMBER() OVER(PARTITION BY agent_id ORDER BY created_at DESC) AS rn
 		FROM workspace_agent_stats WHERE created_at > $1
@@ -192,10 +192,10 @@ SELECT
 	-- Repeated so this row keeps the same layout as GetWorkspaceAgentStats, which
 	-- telemetry converts between.
 	agent_id,
-	coalesce(SUM((session_counts ->> 'vscode')::bigint) FILTER (WHERE in_latest_usage_minute), 0)::bigint AS session_count_vscode,
-	coalesce(SUM((session_counts ->> 'ssh')::bigint) FILTER (WHERE in_latest_usage_minute), 0)::bigint AS session_count_ssh,
-	coalesce(SUM((session_counts ->> 'jetbrains')::bigint) FILTER (WHERE in_latest_usage_minute), 0)::bigint AS session_count_jetbrains,
-	coalesce(SUM((session_counts ->> 'reconnecting_pty')::bigint) FILTER (WHERE in_latest_usage_minute), 0)::bigint AS session_count_reconnecting_pty
+	coalesce(SUM((SELECT coalesce(SUM((stats.session_counts ->> app)::bigint), 0) FROM unnest(@vscode_apps::text[]) AS app)) FILTER (WHERE in_latest_usage_minute), 0)::bigint AS session_count_vscode,
+	coalesce(SUM((SELECT coalesce(SUM((stats.session_counts ->> app)::bigint), 0) FROM unnest(@ssh_apps::text[]) AS app)) FILTER (WHERE in_latest_usage_minute), 0)::bigint AS session_count_ssh,
+	coalesce(SUM((SELECT coalesce(SUM((stats.session_counts ->> app)::bigint), 0) FROM unnest(@jetbrains_apps::text[]) AS app)) FILTER (WHERE in_latest_usage_minute), 0)::bigint AS session_count_jetbrains,
+	coalesce(SUM((SELECT coalesce(SUM((stats.session_counts ->> app)::bigint), 0) FROM unnest(@reconnecting_pty_apps::text[]) AS app)) FILTER (WHERE in_latest_usage_minute), 0)::bigint AS session_count_reconnecting_pty
 FROM stats
 GROUP BY user_id, agent_id, workspace_id, template_id
 HAVING BOOL_OR(reports_latency);
@@ -214,10 +214,10 @@ WITH agent_stats AS (
 ), latest_agent_stats AS (
 	SELECT
 		a.agent_id,
-		coalesce(SUM((a.session_counts ->> 'vscode')::bigint), 0)::bigint AS session_count_vscode,
-		coalesce(SUM((a.session_counts ->> 'ssh')::bigint), 0)::bigint AS session_count_ssh,
-		coalesce(SUM((a.session_counts ->> 'jetbrains')::bigint), 0)::bigint AS session_count_jetbrains,
-		coalesce(SUM((a.session_counts ->> 'reconnecting_pty')::bigint), 0)::bigint AS session_count_reconnecting_pty,
+		coalesce(SUM((SELECT coalesce(SUM((a.session_counts ->> app)::bigint), 0) FROM unnest(@vscode_apps::text[]) AS app)), 0)::bigint AS session_count_vscode,
+		coalesce(SUM((SELECT coalesce(SUM((a.session_counts ->> app)::bigint), 0) FROM unnest(@ssh_apps::text[]) AS app)), 0)::bigint AS session_count_ssh,
+		coalesce(SUM((SELECT coalesce(SUM((a.session_counts ->> app)::bigint), 0) FROM unnest(@jetbrains_apps::text[]) AS app)), 0)::bigint AS session_count_jetbrains,
+		coalesce(SUM((SELECT coalesce(SUM((a.session_counts ->> app)::bigint), 0) FROM unnest(@reconnecting_pty_apps::text[]) AS app)), 0)::bigint AS session_count_reconnecting_pty,
 		coalesce(SUM(a.connection_count), 0)::bigint AS connection_count,
 		coalesce(MAX(a.connection_median_latency_ms), 0)::float AS connection_median_latency_ms
 	 FROM (
@@ -268,10 +268,10 @@ WITH agent_stats AS (
 ), latest_agent_stats AS (
 	SELECT
 		agent_id,
-		coalesce(SUM((session_counts ->> 'vscode')::bigint), 0)::bigint AS session_count_vscode,
-		coalesce(SUM((session_counts ->> 'ssh')::bigint), 0)::bigint AS session_count_ssh,
-		coalesce(SUM((session_counts ->> 'jetbrains')::bigint), 0)::bigint AS session_count_jetbrains,
-		coalesce(SUM((session_counts ->> 'reconnecting_pty')::bigint), 0)::bigint AS session_count_reconnecting_pty,
+		coalesce(SUM((SELECT coalesce(SUM((workspace_agent_stats.session_counts ->> app)::bigint), 0) FROM unnest(@vscode_apps::text[]) AS app)), 0)::bigint AS session_count_vscode,
+		coalesce(SUM((SELECT coalesce(SUM((workspace_agent_stats.session_counts ->> app)::bigint), 0) FROM unnest(@ssh_apps::text[]) AS app)), 0)::bigint AS session_count_ssh,
+		coalesce(SUM((SELECT coalesce(SUM((workspace_agent_stats.session_counts ->> app)::bigint), 0) FROM unnest(@jetbrains_apps::text[]) AS app)), 0)::bigint AS session_count_jetbrains,
+		coalesce(SUM((SELECT coalesce(SUM((workspace_agent_stats.session_counts ->> app)::bigint), 0) FROM unnest(@reconnecting_pty_apps::text[]) AS app)), 0)::bigint AS session_count_reconnecting_pty,
 		coalesce(SUM(connection_count), 0)::bigint AS connection_count
 	FROM workspace_agent_stats
 	-- We only want the latest stats, but those stats might be
