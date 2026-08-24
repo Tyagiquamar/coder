@@ -6,7 +6,10 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"os/exec"
 	"regexp"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -652,6 +655,92 @@ func TestQuickstartLanguageSelectorMatchesInstallScript(t *testing.T) {
 		require.Subset(t, selectorValues, langs,
 			"preset #%d languages %v must be a subset of selector options %v", i, langs, selectorValues)
 	}
+}
+
+// TestQuickstartToolchainsPersistUnderHome guards the fix for the every-start
+// reinstall: Go, Node.js, and Java must install under $HOME (the persistent home
+// volume) instead of into the ephemeral container, so a workspace restart reuses
+// them rather than re-fetching them from the network. It asserts the system-level
+// install mechanisms this change removed do not creep back in, and that each of
+// the three toolchains still puts its bin directory under $HOME on PATH. Python
+// and C/C++ come from the base image and Rust already persists under ~/.cargo, so
+// they are out of scope here.
+func TestQuickstartToolchainsPersistUnderHome(t *testing.T) {
+	t.Parallel()
+
+	fsys, err := templatebuilder.BaseTemplateFS("quickstart")
+	require.NoError(t, err)
+	raw, err := fs.ReadFile(fsys, "install-languages.sh.tftpl")
+	require.NoError(t, err)
+	script := string(raw)
+
+	// System-level installs that landed in the ephemeral container and so
+	// re-downloaded on every start. None of these may return.
+	for _, ephemeral := range []string{
+		"/usr/local/go",                 // Go unpacked into the system prefix
+		"deb.nodesource.com",            // Node.js installed via apt
+		"apt-get install -y -qq nodejs", // Node.js installed via apt
+		"openjdk",                       // Java installed via apt
+	} {
+		require.NotContains(t, script, ephemeral,
+			"Go/Node.js/Java must persist under $HOME, not reinstall into the ephemeral container")
+	}
+
+	// Each network toolchain must put its bin directory under the persistent home
+	// volume on PATH, so it survives a restart.
+	for _, persisted := range []string{
+		"$HOME/.local/go/bin",   // Go
+		"$HOME/.local/node/bin", // Node.js
+		"$HOME/.local/java/bin", // Java
+	} {
+		require.Contains(t, script, persisted,
+			"expected the toolchain to install under the persistent home volume")
+	}
+
+	// The PATH edits must land in the login shell profile (~/.profile), which
+	// login shells read even non-interactively (coder ssh, remote-IDE exec). The
+	// stock ~/.bashrc returns early in non-interactive shells, so persisting there
+	// would hide the toolchains from those sessions.
+	require.Contains(t, script, "$HOME/.profile",
+		"PATH must persist to ~/.profile so non-interactive login shells see the toolchains")
+	require.NotContains(t, script, ".bashrc",
+		"~/.bashrc returns early in non-interactive shells; persist PATH to ~/.profile instead")
+}
+
+// TestQuickstartInstallScriptRendersValidBash renders the quickstart language
+// install template the way Terraform's templatefile() does and syntax-checks the
+// result with `bash -n`. The .sh.tftpl extension hides this base from
+// lint/shellcheck and fmt/shfmt (both match only *.sh), so without this test the
+// script has no mechanical coverage; a template edit that renders to broken
+// shell would ship silently. This guards the whole file, including the PATH and
+// atomic-install logic other tests only assert on as text.
+func TestQuickstartInstallScriptRendersValidBash(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("bash is not available on Windows runners")
+	}
+	bashPath, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash not found in PATH")
+	}
+
+	fsys, err := templatebuilder.BaseTemplateFS("quickstart")
+	require.NoError(t, err)
+	raw, err := fs.ReadFile(fsys, "install-languages.sh.tftpl")
+	require.NoError(t, err)
+
+	// Emulate Terraform templatefile(): the only interpolation token in this
+	// file is ${LANGUAGES}, and every shell brace expansion is escaped as
+	// $${...}, which Terraform unescapes to ${...}. Substitute all selectable
+	// languages so every install branch is present in the checked script.
+	rendered := strings.ReplaceAll(string(raw), "${LANGUAGES}", "python,nodejs,go,rust,java,cpp")
+	rendered = strings.ReplaceAll(rendered, "$${", "${")
+
+	cmd := exec.Command(bashPath, "-n")
+	cmd.Stdin = strings.NewReader(rendered)
+	out, err := cmd.CombinedOutput()
+	require.NoErrorf(t, err, "rendered install script failed `bash -n`:\n%s", out)
 }
 
 // TestExtractHCLHelpers verifies the HCL extraction helpers on crafted input
