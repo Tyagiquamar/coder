@@ -2,6 +2,7 @@ package workspacesdk_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -143,4 +144,34 @@ type fakeResolver struct {
 func (f *fakeResolver) LookupIP(_ context.Context, network, host string) ([]net.IP, error) {
 	assert.Equal(f.t, "ip6", network)
 	return f.hostMap[host], f.err
+}
+
+// TestFileEdit_MarshalEmitsDeprecatedKeys pins the coderd->agent
+// wire compatibility (CODAGT-483): the request JSON must keep
+// carrying the pre-rename search/replace keys so running agents on
+// older versions decode edits while coderd upgrades first. Remove
+// it together with FileEdit.MarshalJSON once every deployed agent
+// decodes old_text/new_text.
+func TestFileEdit_MarshalEmitsDeprecatedKeys(t *testing.T) {
+	t.Parallel()
+
+	edit := workspacesdk.FileEdit{OldText: "old", NewText: "new", ReplaceAll: true}
+	data, err := json.Marshal(edit)
+	require.NoError(t, err)
+
+	// The pre-rename FileEdit shape an old agent decodes into.
+	var oldAgent struct {
+		Search     string `json:"search"`
+		Replace    string `json:"replace"`
+		ReplaceAll bool   `json:"replace_all"`
+	}
+	require.NoError(t, json.Unmarshal(data, &oldAgent))
+	require.Equal(t, "old", oldAgent.Search)
+	require.Equal(t, "new", oldAgent.Replace)
+	require.True(t, oldAgent.ReplaceAll)
+
+	// The new decode path sees the same values.
+	var round workspacesdk.FileEdit
+	require.NoError(t, json.Unmarshal(data, &round))
+	require.Equal(t, edit, round)
 }

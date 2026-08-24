@@ -1185,6 +1185,20 @@ type FileEdit struct {
 	ReplaceAll bool   `json:"replace_all,omitempty"`
 }
 
+// MarshalJSON emits both the current and the deprecated
+// "search"/"replace" keys so agents that predate the rename keep
+// decoding the request while coderd upgrades ahead of running
+// workspaces (CODAGT-483). Remove once every deployed agent decodes
+// "old_text"/"new_text".
+func (e FileEdit) MarshalJSON() ([]byte, error) {
+	type wire FileEdit
+	return json.Marshal(struct {
+		wire
+		Search  string `json:"search"`
+		Replace string `json:"replace"`
+	}{wire: wire(e), Search: e.OldText, Replace: e.NewText})
+}
+
 type FileEdits struct {
 	Path  string     `json:"path"`
 	Edits []FileEdit `json:"edits"`
