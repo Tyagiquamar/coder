@@ -18,6 +18,7 @@ import (
 	"github.com/sony/gobreaker/v2"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/net/http/httpguts"
 	"golang.org/x/xerrors"
 
 	"cdr.dev/slog/v3"
@@ -244,6 +245,12 @@ func newInterceptionProcessor(p provider.Provider, cbs *circuitbreaker.ProviderC
 		ctx, span := tracer.Start(r.Context(), "Intercept")
 		defer span.End()
 
+		if isWebSocketUpgrade(r) {
+			logger.Debug(ctx, "rejecting unsupported WebSocket upgrade", slog.F("path", r.URL.Path))
+			http.Error(w, "WebSocket transport is not supported; use HTTP", http.StatusNotImplemented)
+			return
+		}
+
 		// We execute this before CreateInterceptor since the interceptors
 		// read the request body and don't reset them.
 		client := GuessClient(r)
@@ -380,6 +387,11 @@ func newInterceptionProcessor(p provider.Provider, cbs *circuitbreaker.ProviderC
 		// Ensure all recording have completed before completing request.
 		asyncRecorder.Wait()
 	}
+}
+
+func isWebSocketUpgrade(r *http.Request) bool {
+	return httpguts.HeaderValuesContainsToken(r.Header.Values("Connection"), "upgrade") &&
+		httpguts.HeaderValuesContainsToken(r.Header.Values("Upgrade"), "websocket")
 }
 
 // writeRequestBodyTooLarge writes a human-readable 413 response indicating that

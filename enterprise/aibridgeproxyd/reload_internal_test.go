@@ -95,7 +95,7 @@ func TestBuildProviderRouter(t *testing.T) {
 
 		reload := ProviderReload{Providers: []ReloadedProvider{
 			enabledProvider("openai", "api.openai.com"),
-			enabledProvider("anthropic", "api.anthropic.com"),
+			{ProviderOutcome: aibridged.ProviderOutcome{Name: "anthropic", Type: "anthropic", Status: aibridged.ProviderStatusEnabled}, Host: "api.anthropic.com"},
 			enabledProvider("custom", "custom-llm.example.com"),
 			// Host is populated on the non-enabled rows so the Status
 			// guard, not the empty-host guard, is what excludes them.
@@ -107,8 +107,11 @@ func TestBuildProviderRouter(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "openai", router.providerFromHost("api.openai.com"))
+		assert.Equal(t, "openai", router.providerTypeFromHost("api.openai.com"))
 		assert.Equal(t, "anthropic", router.providerFromHost("api.anthropic.com"))
+		assert.Equal(t, "anthropic", router.providerTypeFromHost("api.anthropic.com"))
 		assert.Equal(t, "custom", router.providerFromHost("custom-llm.example.com"))
+		assert.Equal(t, "openai", router.providerTypeFromHost("custom-llm.example.com"))
 		assert.Empty(t, router.providerFromHost("unknown.com"))
 		assert.Empty(t, router.providerFromHost("disabled.example.com"),
 			"disabled provider must not be routable even with a populated Host")
@@ -132,6 +135,7 @@ func TestBuildProviderRouter(t *testing.T) {
 
 		assert.Equal(t, "provider", router.providerFromHost("API.Example.COM"))
 		assert.Equal(t, "provider", router.providerFromHost("api.example.com"))
+		assert.Equal(t, "openai", router.providerTypeFromHost("API.Example.COM"))
 	})
 
 	t.Run("DefensiveDeduplicatesSameHost", func(t *testing.T) {

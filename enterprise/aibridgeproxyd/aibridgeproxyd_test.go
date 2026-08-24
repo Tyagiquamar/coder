@@ -212,7 +212,7 @@ func withProviderHosts(hosts ...string) testProxyOption {
 			providers = append(providers, aibridgeproxyd.ReloadedProvider{
 				ProviderOutcome: aibridged.ProviderOutcome{
 					Name:   name,
-					Type:   "openai",
+					Type:   testProviderTypeFromHost(h),
 					Status: aibridged.ProviderStatusEnabled,
 				},
 				Host: strings.ToLower(host),
@@ -222,8 +222,21 @@ func withProviderHosts(hosts ...string) testProxyOption {
 	}
 }
 
-// testProviderFromHost maps well-known AI provider hostnames to
-// provider names for test use. Unknown hosts return "".
+// testProviderTypeFromHost maps well-known AI provider hostnames to provider
+// types for test use. Unknown hosts default to OpenAI.
+func testProviderTypeFromHost(host string) string {
+	switch strings.ToLower(host) {
+	case aibridgeproxyd.HostCopilot, agplaibridge.HostCopilotBusiness, agplaibridge.HostCopilotEnterprise:
+		return aibridge.ProviderCopilot
+	case aibridgeproxyd.HostAnthropic:
+		return aibridge.ProviderAnthropic
+	default:
+		return aibridge.ProviderOpenAI
+	}
+}
+
+// testProviderFromHost maps well-known AI provider hostnames to provider names
+// for test use. Unknown hosts return "".
 func testProviderFromHost(host string) string {
 	switch strings.ToLower(host) {
 	case aibridgeproxyd.HostAnthropic:
@@ -1613,13 +1626,13 @@ func TestProxy_MITM_BYOKInjection(t *testing.T) {
 
 			srv := newTestProxy(t,
 				withGatewayURL(aibridgedServer.URL),
-				withProviderHosts(aibridgeproxyd.HostCopilot),
+				withProviderHosts(aibridgeproxyd.HostOpenAI),
 			)
 
 			certPool := getProxyCertPool(t)
 			client := newProxyClient(t, srv, makeProxyAuthHeader(coderToken), certPool, false)
 
-			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "https://"+aibridgeproxyd.HostCopilot+"/chat/completions", strings.NewReader(`{}`))
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "https://"+aibridgeproxyd.HostOpenAI+"/chat/completions", strings.NewReader(`{}`))
 			require.NoError(t, err)
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Authorization", tt.authzHeader)
@@ -1643,16 +1656,21 @@ func TestProxy_MITM_BYOKInjection(t *testing.T) {
 	}
 }
 
-func TestProxy_MITM_CopilotPingAuth(t *testing.T) {
+func TestProxy_MITM_CopilotAuth(t *testing.T) {
 	t.Parallel()
 
 	const coderToken = "coder-token"
 	tests := []struct {
-		name       string
-		host       string
-		method     string
-		path       string
-		expectAuth bool
+		name                 string
+		host                 string
+		providerType         string
+		method               string
+		path                 string
+		authorization        string
+		governanceToken      string
+		expectAuth           bool
+		expectAuthorization  string
+		expectGovernanceAuth string
 	}{
 		{
 			name:       "Copilot individual GET ping",
@@ -1676,16 +1694,69 @@ func TestProxy_MITM_CopilotPingAuth(t *testing.T) {
 			expectAuth: true,
 		},
 		{
-			name:   "Copilot POST ping",
-			host:   aibridgeproxyd.HostCopilot,
-			method: http.MethodPost,
-			path:   "/_ping",
+			name:       "Copilot POST ping",
+			host:       aibridgeproxyd.HostCopilot,
+			method:     http.MethodPost,
+			path:       "/_ping",
+			expectAuth: true,
 		},
 		{
-			name:   "Copilot GET models",
-			host:   aibridgeproxyd.HostCopilot,
-			method: http.MethodGet,
-			path:   "/models",
+			name:       "Copilot GET models",
+			host:       aibridgeproxyd.HostCopilot,
+			method:     http.MethodGet,
+			path:       "/models",
+			expectAuth: true,
+		},
+		{
+			name:       "Copilot POST responses",
+			host:       aibridgeproxyd.HostCopilot,
+			method:     http.MethodPost,
+			path:       "/responses",
+			expectAuth: true,
+		},
+		{
+			name:                 "Copilot strips Coder bearer token",
+			host:                 aibridgeproxyd.HostCopilot,
+			method:               http.MethodPost,
+			path:                 "/responses",
+			authorization:        "Bearer " + coderToken,
+			expectAuth:           true,
+			expectGovernanceAuth: coderToken,
+		},
+		{
+			name:                 "Copilot preserves provider bearer token",
+			host:                 aibridgeproxyd.HostCopilot,
+			method:               http.MethodPost,
+			path:                 "/responses",
+			authorization:        "Bearer copilot-token",
+			expectAuth:           true,
+			expectAuthorization:  "Bearer copilot-token",
+			expectGovernanceAuth: coderToken,
+		},
+		{
+			name:                 "Copilot replaces client governance token",
+			host:                 aibridgeproxyd.HostCopilot,
+			method:               http.MethodGet,
+			path:                 "/models",
+			governanceToken:      "other-coder-token",
+			expectAuth:           true,
+			expectGovernanceAuth: coderToken,
+		},
+		{
+			name:                 "Custom Copilot provider",
+			host:                 "copilot.example.com",
+			providerType:         aibridge.ProviderCopilot,
+			method:               http.MethodGet,
+			path:                 "/_ping",
+			expectAuth:           true,
+			expectGovernanceAuth: coderToken,
+		},
+		{
+			name:         "Non-Copilot provider on Copilot host",
+			host:         aibridgeproxyd.HostCopilot,
+			providerType: aibridge.ProviderOpenAI,
+			method:       http.MethodGet,
+			path:         "/_ping",
 		},
 		{
 			name:   "OpenAI GET ping",
@@ -1699,16 +1770,32 @@ func TestProxy_MITM_CopilotPingAuth(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			var receivedBYOKHeader string
+			var receivedBYOKHeader, receivedAuthorization string
 			aibridgedServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				receivedBYOKHeader = r.Header.Get(agplaibridge.HeaderCoderToken)
+				receivedAuthorization = r.Header.Get("Authorization")
 				w.WriteHeader(http.StatusOK)
 			}))
 			t.Cleanup(aibridgedServer.Close)
 
+			providerType := tt.providerType
+			if providerType == "" {
+				providerType = testProviderTypeFromHost(tt.host)
+			}
+			providerName := testProviderFromHost(tt.host)
+			if providerName == "" {
+				providerName = "test-provider"
+			}
 			srv := newTestProxy(t,
 				withGatewayURL(aibridgedServer.URL),
-				withProviderHosts(tt.host),
+				withProviders(aibridgeproxyd.ReloadedProvider{
+					ProviderOutcome: aibridged.ProviderOutcome{
+						Name:   providerName,
+						Type:   providerType,
+						Status: aibridged.ProviderStatusEnabled,
+					},
+					Host: tt.host,
+				}),
 			)
 
 			certPool := getProxyCertPool(t)
@@ -1716,13 +1803,24 @@ func TestProxy_MITM_CopilotPingAuth(t *testing.T) {
 
 			req, err := http.NewRequestWithContext(t.Context(), tt.method, "https://"+tt.host+tt.path, nil)
 			require.NoError(t, err)
+			if tt.authorization != "" {
+				req.Header.Set("Authorization", tt.authorization)
+			}
+			if tt.governanceToken != "" {
+				req.Header.Set(agplaibridge.HeaderCoderToken, tt.governanceToken)
+			}
 			resp, err := client.Do(req)
 			require.NoError(t, err)
 			defer resp.Body.Close()
 
 			require.Equal(t, http.StatusOK, resp.StatusCode)
+			require.Equal(t, tt.expectAuthorization, receivedAuthorization)
 			if tt.expectAuth {
-				require.Equal(t, coderToken, receivedBYOKHeader)
+				expectedGovernanceAuth := tt.expectGovernanceAuth
+				if expectedGovernanceAuth == "" {
+					expectedGovernanceAuth = coderToken
+				}
+				require.Equal(t, expectedGovernanceAuth, receivedBYOKHeader)
 			} else {
 				require.Empty(t, receivedBYOKHeader)
 			}

@@ -124,6 +124,7 @@ func (s *Server) mitmHostsCondition() goproxy.ReqConditionFunc {
 // duplicates as proxy-excluded.
 func buildProviderRouter(reload ProviderReload, allowedPorts []string) (*providerRouter, error) {
 	nameByHost := make(map[string]string, len(reload.Providers))
+	typeByHost := make(map[string]string, len(reload.Providers))
 	domains := make([]string, 0, len(reload.Providers))
 	for _, p := range reload.Providers {
 		if p.Status != aibridged.ProviderStatusEnabled {
@@ -137,11 +138,16 @@ func buildProviderRouter(reload ProviderReload, allowedPorts []string) (*provide
 			continue
 		}
 		nameByHost[host] = p.Name
+		typeByHost[host] = p.Type
 		domains = append(domains, host)
 	}
 	mitmHosts, err := convertDomainsToHosts(domains, allowedPorts)
 	if err != nil {
 		return nil, err
 	}
-	return &providerRouter{mitmHosts: mitmHosts, nameByHost: nameByHost}, nil
+	return &providerRouter{
+		mitmHosts:  mitmHosts,
+		nameByHost: nameByHost,
+		typeByHost: typeByHost,
+	}, nil
 }
