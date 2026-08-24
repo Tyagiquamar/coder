@@ -12,9 +12,9 @@ import { StatusIconTooltip } from "./StatusIconTooltip";
 
 const EM_DASH = "\u2014";
 
-/** Shown on both cells when the governing group is in another org. */
-const OTHER_ORG_MESSAGE =
-	"This user's AI budget is managed by a group in another organization and isn't visible here.";
+/** Shown on both cells when the governing group is not visible. */
+const HIDDEN_GROUP_MESSAGE =
+	"This user's AI budget is managed by a group that isn't visible to you.";
 
 /**
  * The AI spend and Budget group cells for a group member. Spend is scoped to
@@ -28,8 +28,8 @@ export const GroupMemberBudgetCells: FC<{
 	const effective = effectiveBudgetGroup(spend, group);
 	const fromOtherGroup = effective.kind === "other";
 
-	// A null effective_group_id is a group in another org that can't be
-	// fetched, so only resolve the name when an ID exists.
+	// A null effective_group_id is a group that can't be shown, so only resolve
+	// the name when an ID exists.
 	const { data: effectiveGroup, isLoading: isResolvingGroupName } = useQuery({
 		...groupById(spend?.effective_group_id ?? "", {
 			exclude_members: true,
@@ -71,9 +71,9 @@ export const GroupMemberBudgetCells: FC<{
 			} else if (effectiveGroupName) {
 				budgetGroup = <Badge size="sm">{badgeName(effectiveGroupName)}</Badge>;
 			} else {
-				// The group can't be resolved (another org), so it can't be named.
+				// The group can't be resolved, so it can't be named.
 				budgetGroup = (
-					<LabelWithInfo label={EM_DASH} message={OTHER_ORG_MESSAGE} />
+					<LabelWithInfo label={EM_DASH} message={HIDDEN_GROUP_MESSAGE} />
 				);
 			}
 			break;
@@ -86,7 +86,7 @@ export const GroupMemberBudgetCells: FC<{
 			budget = <Spinner loading size="sm" />;
 		} else if (!effectiveGroupName) {
 			// The spend hides entirely when the governing group can't be resolved.
-			budget = <LabelWithInfo label={EM_DASH} message={OTHER_ORG_MESSAGE} />;
+			budget = <LabelWithInfo label={EM_DASH} message={HIDDEN_GROUP_MESSAGE} />;
 		} else {
 			budget = (
 				<div className="flex flex-col gap-0.5">
@@ -120,8 +120,7 @@ export const GroupMemberBudgetCells: FC<{
 			);
 		}
 	} else if (spend) {
-		const effectiveBudget = spend.group_budget ?? spend.effective_budget;
-		const limit = effectiveBudget?.spend_limit_micros ?? null;
+		const limit = spend.effective_budget?.spend_limit_micros ?? null;
 		if (limit === null) {
 			// The effective group has no budget, so no limit applies.
 			budget = (
@@ -137,7 +136,9 @@ export const GroupMemberBudgetCells: FC<{
 			);
 		} else {
 			const limitLabel =
-				effectiveBudget?.limit_source === "user_override" ? "Custom" : "Group";
+				spend.effective_budget?.limit_source === "user_override"
+					? "Custom"
+					: "Group";
 			budget = (
 				<div className="flex flex-col gap-0.5">
 					<span>
@@ -175,8 +176,9 @@ type EffectiveBudgetGroup =
 /**
  * Resolves which group governs a member's AI budget. "none" means no budget
  * data loaded; "everyone" is the org-wide fallback when no named group sets a
- * budget. A null effective group means the budget resolves to a group in
- * another organization, so it can't be shown here.
+ * budget. A null effective group means the budget resolves to a group that
+ * can't be shown, either because it belongs to another organization or the
+ * caller can't read it.
  */
 export function effectiveBudgetGroup(
 	spend: GroupMemberAISpend | undefined,
