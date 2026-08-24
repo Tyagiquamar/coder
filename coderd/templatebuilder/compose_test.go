@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/coder/coder/v2/coderd/templatebuilder"
+	"github.com/coder/coder/v2/codersdk"
 )
 
 func TestCompose(t *testing.T) {
@@ -699,6 +700,66 @@ data "coder_workspace_preset" "web" {
 		templatebuilder.ExtractPresetParameterValues(src, "languages"),
 		"must unwrap jsonencode(...) in preset parameters")
 	require.Nil(t, templatebuilder.ExtractParameterOptionValues(src, "nonexistent"))
+}
+
+func TestRenderBaseHonorsRegistryMirror(t *testing.T) {
+	t.Parallel()
+
+	const mirror = "mirror.internal.example"
+
+	// Every base that embeds a catalog module must render its source against the
+	// deployment's configured registry (RegistryBase) rather than a hardcoded
+	// public registry, so a registry mirror is honored just like wizard-composed
+	// modules.
+	bases := []struct {
+		id         string
+		modulePath string
+	}{
+		{"quickstart", "/coder/git-clone/coder"},
+		{"azure-linux", "/coder/azure-region/coder"},
+		{"gcp-linux", "/coder/gcp-region/coder"},
+		{"gcp-windows", "/coder/gcp-region/coder"},
+	}
+	for _, tc := range bases {
+		t.Run(tc.id, func(t *testing.T) {
+			t.Parallel()
+
+			rc := testRenderContext(tc.id)
+			rc.RegistryBase = mirror
+			rendered, err := templatebuilder.RenderBaseTemplate(tc.id, "main.tf.tmpl", rc)
+			require.NoError(t, err)
+			require.Contains(t, string(rendered), mirror+tc.modulePath,
+				"base %q should render its module source against the configured registry", tc.id)
+			require.NotContains(t, string(rendered), codersdk.DefaultTemplateBuilderRegistryURL+tc.modulePath,
+				"base %q should not hardcode the public registry in its module source", tc.id)
+		})
+	}
+}
+
+func TestComposeThreadsRegistryURLToBase(t *testing.T) {
+	t.Parallel()
+
+	const mirror = "mirror.internal.example"
+
+	// Compose threads ComposeRequest.RegistryURL into base rendering, so the
+	// quickstart base's embedded git-clone module resolves through the mirror.
+	res, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
+		BaseTemplateID: "quickstart",
+		RegistryURL:    mirror,
+	})
+	require.NoError(t, err)
+	require.Contains(t, string(res.MainTF), mirror+"/coder/git-clone/coder")
+	require.NotContains(t, string(res.MainTF),
+		codersdk.DefaultTemplateBuilderRegistryURL+"/coder/git-clone/coder")
+
+	// With RegistryURL unset, the base falls back to the canonical default
+	// instead of rendering a registry-less source.
+	resDefault, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
+		BaseTemplateID: "quickstart",
+	})
+	require.NoError(t, err)
+	require.Contains(t, string(resDefault.MainTF),
+		codersdk.DefaultTemplateBuilderRegistryURL+"/coder/git-clone/coder")
 }
 
 // extractTar reads a tar archive and returns a map of filename to content.

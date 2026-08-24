@@ -53,7 +53,7 @@ type ComposeResult struct {
 // source files. It extracts the coder_agent resource name from the
 // rendered base HCL and wires it into each module block.
 func Compose(req ComposeRequest) (*ComposeResult, error) {
-	mainTF, err := renderBase(req.BaseTemplateID, req.BaseVariableValues)
+	mainTF, err := renderBase(req.BaseTemplateID, req.BaseVariableValues, req.RegistryURL)
 	if err != nil {
 		return nil, err
 	}
@@ -107,12 +107,19 @@ func formatHCL(src []byte) []byte {
 	return hclwrite.Format(src)
 }
 
-// renderBase renders the base template for the given example ID,
-// merging any user-supplied variable values into the render context.
-func renderBase(baseTemplateID string, baseVars map[string]string) ([]byte, error) {
+// renderBase renders the base template for the given example ID, merging any
+// user-supplied variable values into the render context and threading the
+// deployment's module registry URL so base-embedded module sources honor it.
+func renderBase(baseTemplateID string, baseVars map[string]string, registryURL string) ([]byte, error) {
 	renderCtx := DefaultBaseRenderContext(baseTemplateID)
 	if renderCtx.Variables == nil {
 		renderCtx.Variables = make(map[string]string)
+	}
+	// Honor the deployment's configured registry mirror for any module the base
+	// embeds; fall back to the canonical default (already set by
+	// DefaultBaseRenderContext) when unset so the source is never registry-less.
+	if registryURL != "" {
+		renderCtx.RegistryBase = registryURL
 	}
 
 	vars, err := mergeBaseVariables(baseTemplateID, baseVars)
