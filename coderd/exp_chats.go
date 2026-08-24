@@ -2866,7 +2866,7 @@ func (api *API) patchChatMessage(rw http.ResponseWriter, r *http.Request) {
 // @Security CoderSessionToken
 // @Tags Chats
 // @Param chat path string true "Chat ID"
-// @Param queuedMessage path string true "Queued message ID"
+// @Param queuedMessage path int true "Queued message ID"
 // @Success 204
 // @Router /api/v2/chats/{chat}/queue/{queuedMessage} [delete]
 func (api *API) deleteChatQueuedMessage(rw http.ResponseWriter, r *http.Request) {
@@ -2926,7 +2926,7 @@ func (api *API) deleteChatQueuedMessage(rw http.ResponseWriter, r *http.Request)
 // @Security CoderSessionToken
 // @Tags Chats
 // @Param chat path string true "Chat ID"
-// @Param queuedMessage path string true "Queued message ID"
+// @Param queuedMessage path int true "Queued message ID"
 // @Produce json
 // @Success 202 {object} codersdk.Response
 // @Router /api/v2/chats/{chat}/queue/{queuedMessage}/promote [post]
@@ -3053,6 +3053,7 @@ func (api *API) markChatAsRead(ctx context.Context, chatID uuid.UUID) {
 // @Tags Chats
 // @Produce json
 // @Param chat path string true "Chat ID" format(uuid)
+// @Param after_id query int false "Skip snapshot messages with id at or before this cursor"
 // @Success 200 {array} codersdk.ChatStreamEvent
 // @Router /api/v2/chats/{chat}/stream [get]
 func (api *API) streamChat(rw http.ResponseWriter, r *http.Request) {
@@ -8278,7 +8279,7 @@ func (api *API) getChatDebugRun(rw http.ResponseWriter, r *http.Request) {
 // @Tags Chats
 // @Produce json
 // @Param chat path string true "Chat ID" format(uuid)
-// @Success 200 {object} codersdk.ChatStreamEvent
+// @Success 200 {array} codersdk.ChatStreamEvent
 // @Router /api/v2/chats/{chat}/stream/parts [get]
 func (api *API) streamChatParts(rw http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
