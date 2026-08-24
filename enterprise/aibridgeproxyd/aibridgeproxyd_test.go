@@ -1643,6 +1643,93 @@ func TestProxy_MITM_BYOKInjection(t *testing.T) {
 	}
 }
 
+func TestProxy_MITM_CopilotPingAuth(t *testing.T) {
+	t.Parallel()
+
+	const coderToken = "coder-token"
+	tests := []struct {
+		name       string
+		host       string
+		method     string
+		path       string
+		expectAuth bool
+	}{
+		{
+			name:       "Copilot individual GET ping",
+			host:       aibridgeproxyd.HostCopilot,
+			method:     http.MethodGet,
+			path:       "/_ping",
+			expectAuth: true,
+		},
+		{
+			name:       "Copilot business GET ping",
+			host:       agplaibridge.HostCopilotBusiness,
+			method:     http.MethodGet,
+			path:       "/_ping",
+			expectAuth: true,
+		},
+		{
+			name:       "Copilot enterprise GET ping",
+			host:       agplaibridge.HostCopilotEnterprise,
+			method:     http.MethodGet,
+			path:       "/_ping",
+			expectAuth: true,
+		},
+		{
+			name:   "Copilot POST ping",
+			host:   aibridgeproxyd.HostCopilot,
+			method: http.MethodPost,
+			path:   "/_ping",
+		},
+		{
+			name:   "Copilot GET models",
+			host:   aibridgeproxyd.HostCopilot,
+			method: http.MethodGet,
+			path:   "/models",
+		},
+		{
+			name:   "OpenAI GET ping",
+			host:   aibridgeproxyd.HostOpenAI,
+			method: http.MethodGet,
+			path:   "/_ping",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var receivedBYOKHeader string
+			aibridgedServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				receivedBYOKHeader = r.Header.Get(agplaibridge.HeaderCoderToken)
+				w.WriteHeader(http.StatusOK)
+			}))
+			t.Cleanup(aibridgedServer.Close)
+
+			srv := newTestProxy(t,
+				withGatewayURL(aibridgedServer.URL),
+				withProviderHosts(tt.host),
+			)
+
+			certPool := getProxyCertPool(t)
+			client := newProxyClient(t, srv, makeProxyAuthHeader(coderToken), certPool, false)
+
+			req, err := http.NewRequestWithContext(t.Context(), tt.method, "https://"+tt.host+tt.path, nil)
+			require.NoError(t, err)
+			resp, err := client.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			require.Equal(t, http.StatusOK, resp.StatusCode)
+			if tt.expectAuth {
+				require.Equal(t, coderToken, receivedBYOKHeader)
+			} else {
+				require.Empty(t, receivedBYOKHeader)
+			}
+		})
+	}
+}
+
 // TestListenerTLS verifies that the proxy works correctly when its listener is wrapped in TLS.
 // It tests both tunneled and MITM'd requests through an HTTPS proxy listener.
 func TestListenerTLS(t *testing.T) {

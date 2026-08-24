@@ -91,6 +91,7 @@ func (*Copilot) BridgedRoutes() []string {
 
 func (*Copilot) PassthroughRoutes() []string {
 	return []string{
+		"/_ping",
 		"/models",
 		"/models/",
 		"/agents/",

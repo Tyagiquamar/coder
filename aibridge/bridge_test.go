@@ -244,6 +244,14 @@ func TestPassthroughRoutesForProviders(t *testing.T) {
 			},
 			expectPath: "/v1/models",
 		},
+		{
+			name:        "copilot_ping",
+			requestPath: "/copilot/_ping",
+			provider: func(_ *testing.T, baseURL string) provider.Provider {
+				return aibridge.NewCopilotProvider(config.Copilot{BaseURL: baseURL})
+			},
+			expectPath: "/_ping",
+		},
 	}
 
 	for _, tc := range tests {

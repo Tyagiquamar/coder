@@ -992,6 +992,9 @@ func (s *Server) handleRequest(req *http.Request, ctx *goproxy.ProxyCtx) (*http.
 	req.URL = parsedGatewayTargetURL
 	req.Host = parsedGatewayTargetURL.Host
 
+	if isCopilotHost(host) && req.Method == http.MethodGet && originalPath == "/_ping" {
+		req.Header.Set(agplaibridge.HeaderCoderToken, reqCtx.CoderToken)
+	}
 	injectBYOKHeaderIfNeeded(req.Header, reqCtx.CoderToken)
 
 	// Set request ID header to correlate requests between aibridgeproxyd and aibridged.
@@ -1017,6 +1020,12 @@ func (s *Server) handleRequest(req *http.Request, ctx *goproxy.ProxyCtx) (*http.
 	}
 
 	return req, nil
+}
+
+func isCopilotHost(host string) bool {
+	return host == HostCopilot ||
+		host == agplaibridge.HostCopilotBusiness ||
+		host == agplaibridge.HostCopilotEnterprise
 }
 
 // injectBYOKHeaderIfNeeded sets HeaderCoderToken when the
