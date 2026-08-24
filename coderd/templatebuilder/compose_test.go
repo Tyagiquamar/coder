@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/coder/coder/v2/coderd/templatebuilder"
+	"github.com/coder/coder/v2/codersdk"
 )
 
 func TestCompose(t *testing.T) {
@@ -21,7 +22,7 @@ func TestCompose(t *testing.T) {
 		t.Parallel()
 		result, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "docker",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 		})
 		require.NoError(t, err)
 		require.NotEmpty(t, result.MainTF)
@@ -34,7 +35,7 @@ func TestCompose(t *testing.T) {
 		t.Parallel()
 		result, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "docker",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 			Modules: []templatebuilder.ComposeModule{
 				{
 					ID: "code-server",
@@ -59,7 +60,7 @@ func TestCompose(t *testing.T) {
 		t.Parallel()
 		result, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "aws-linux",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 			Modules: []templatebuilder.ComposeModule{
 				{ID: "git-commit-signing"},
 			},
@@ -72,7 +73,7 @@ func TestCompose(t *testing.T) {
 		t.Parallel()
 		result, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "aws-linux",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 		})
 		require.NoError(t, err)
 		require.NotNil(t, result.ExtraFiles, "aws-linux should have extra files")
@@ -85,7 +86,7 @@ func TestCompose(t *testing.T) {
 		result, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID:     "gcp-linux",
 			BaseVariableValues: map[string]string{"project_id": "my-gcp-project"},
-			RegistryURL:        "https://registry.coder.com",
+			RegistryURL:        "registry.coder.com",
 		})
 		require.NoError(t, err)
 		require.NotEmpty(t, result.MainTF)
@@ -100,7 +101,7 @@ func TestCompose(t *testing.T) {
 		result, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID:     "gcp-windows",
 			BaseVariableValues: map[string]string{"project_id": "my-gcp-project"},
-			RegistryURL:        "https://registry.coder.com",
+			RegistryURL:        "registry.coder.com",
 		})
 		require.NoError(t, err)
 		require.NotEmpty(t, result.MainTF)
@@ -114,7 +115,7 @@ func TestCompose(t *testing.T) {
 		t.Parallel()
 		_, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "gcp-linux",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), `variable "project_id" is required`)
@@ -124,7 +125,7 @@ func TestCompose(t *testing.T) {
 		t.Parallel()
 		result, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "azure-linux",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 		})
 		require.NoError(t, err)
 		require.Contains(t, result.ExtraFiles, "cloud-init/cloud-config.yaml.tftpl")
@@ -134,7 +135,7 @@ func TestCompose(t *testing.T) {
 		t.Parallel()
 		result, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "docker",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 			Modules: []templatebuilder.ComposeModule{
 				{ID: "claude-code"},
 			},
@@ -152,7 +153,7 @@ func TestCompose(t *testing.T) {
 		t.Parallel()
 		result, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "docker",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 			Modules: []templatebuilder.ComposeModule{
 				{ID: "code-server"},
 				{
@@ -187,7 +188,7 @@ func TestCompose(t *testing.T) {
 		t.Parallel()
 		_, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "docker",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 			Modules: []templatebuilder.ComposeModule{
 				{ID: "code-server"},
 				{ID: "code-server"},
@@ -204,7 +205,7 @@ func TestCompose(t *testing.T) {
 		// module block, so compose must reject it.
 		_, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "quickstart",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 			Modules: []templatebuilder.ComposeModule{
 				{ID: "git-clone"},
 			},
@@ -219,7 +220,7 @@ func TestCompose(t *testing.T) {
 		// code-server compose normally on top of it.
 		result, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "quickstart",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 			Modules: []templatebuilder.ComposeModule{
 				{ID: "code-server"},
 			},
@@ -232,7 +233,7 @@ func TestCompose(t *testing.T) {
 		t.Parallel()
 		_, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "docker",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 			Modules: []templatebuilder.ComposeModule{
 				{ID: "code-server"},
 				{ID: "vscode-web"},
@@ -246,7 +247,7 @@ func TestCompose(t *testing.T) {
 		t.Parallel()
 		result, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "docker",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 		})
 		require.NoError(t, err)
 		require.Empty(t, result.ExtraFiles, "docker should have no extra files")
@@ -256,7 +257,7 @@ func TestCompose(t *testing.T) {
 		t.Parallel()
 		_, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "nonexistent",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "unknown base template")
@@ -266,7 +267,7 @@ func TestCompose(t *testing.T) {
 		t.Parallel()
 		_, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "docker",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 			Modules: []templatebuilder.ComposeModule{
 				{ID: "nonexistent-module"},
 			},
@@ -279,7 +280,7 @@ func TestCompose(t *testing.T) {
 		t.Parallel()
 		_, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "docker",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 			Modules: []templatebuilder.ComposeModule{
 				{
 					ID: "code-server",
@@ -298,7 +299,7 @@ func TestCompose(t *testing.T) {
 		t.Parallel()
 		_, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "docker",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 			Modules: []templatebuilder.ComposeModule{
 				{
 					ID: "code-server",
@@ -317,7 +318,7 @@ func TestCompose(t *testing.T) {
 		t.Parallel()
 		_, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "docker",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 			Modules: []templatebuilder.ComposeModule{
 				{
 					ID: "code-server",
@@ -335,7 +336,7 @@ func TestCompose(t *testing.T) {
 		t.Parallel()
 		result, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "docker",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 		})
 		require.NoError(t, err)
 		require.Contains(t, string(result.MainTF), `"codercom/example-base:ubuntu"`)
@@ -345,7 +346,7 @@ func TestCompose(t *testing.T) {
 		t.Parallel()
 		result, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "docker",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 			BaseVariableValues: map[string]string{
 				"container_image": "myregistry/myimage:v2",
 			},
@@ -360,7 +361,7 @@ func TestCompose(t *testing.T) {
 		t.Parallel()
 		result, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "kubernetes",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 			BaseVariableValues: map[string]string{
 				"namespace": "default",
 			},
@@ -373,7 +374,7 @@ func TestCompose(t *testing.T) {
 		t.Parallel()
 		result, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "kubernetes",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 			BaseVariableValues: map[string]string{
 				"namespace":       "default",
 				"container_image": "custom/workspace:latest",
@@ -391,7 +392,7 @@ func TestCompose(t *testing.T) {
 		// Omitting it should cause a render error from missingkey=error.
 		_, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "docker",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 			Modules: []templatebuilder.ComposeModule{
 				{ID: "git-clone"},
 			},
@@ -463,7 +464,7 @@ func TestBundleTar(t *testing.T) {
 		t.Parallel()
 		result, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "docker",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 			Modules: []templatebuilder.ComposeModule{
 				{ID: "code-server"},
 			},
@@ -525,7 +526,7 @@ func TestBundleTar(t *testing.T) {
 		t.Parallel()
 		result, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
 			BaseTemplateID: "aws-linux",
-			RegistryURL:    "https://registry.coder.com",
+			RegistryURL:    "registry.coder.com",
 		})
 		require.NoError(t, err)
 
@@ -699,6 +700,113 @@ data "coder_workspace_preset" "web" {
 		templatebuilder.ExtractPresetParameterValues(src, "languages"),
 		"must unwrap jsonencode(...) in preset parameters")
 	require.Nil(t, templatebuilder.ExtractParameterOptionValues(src, "nonexistent"))
+}
+
+func TestRenderBaseHonorsRegistryMirror(t *testing.T) {
+	t.Parallel()
+
+	const mirror = "mirror.internal.example"
+
+	// Positive anchor: the quickstart base embeds git-clone, so a configured
+	// mirror must appear in its rendered source. This keeps the per-base sweep
+	// below from passing vacuously, since a base with no embedded catalog module
+	// satisfies the negative assertion trivially.
+	rc := testRenderContext("quickstart")
+	rc.RegistryBase = mirror
+	rendered, err := templatebuilder.RenderBaseTemplate("quickstart", "main.tf.tmpl", rc)
+	require.NoError(t, err)
+	require.Contains(t, string(rendered), mirror+"/coder/git-clone/coder",
+		"quickstart must render its embedded module source against the configured registry")
+
+	// Every base must honor the mirror: none may hardcode the public default
+	// registry in a module source. Iterating BaseTemplateIDs() instead of a
+	// hand-maintained list covers a new base, or a newly embedded module, for
+	// free. Matching host+"/coder/" keeps the "# ... registry.coder.com/modules"
+	// doc links from counting.
+	defaultModuleSource := codersdk.DefaultTemplateBuilderRegistryURL + "/coder/"
+	for _, id := range templatebuilder.BaseTemplateIDs() {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+
+			rc := testRenderContext(id)
+			rc.RegistryBase = mirror
+			rendered, err := templatebuilder.RenderBaseTemplate(id, "main.tf.tmpl", rc)
+			require.NoError(t, err)
+			require.NotContains(t, string(rendered), defaultModuleSource,
+				"base %q must render module sources against the configured registry, not the hardcoded default", id)
+		})
+	}
+}
+
+func TestComposeThreadsRegistryURLToBase(t *testing.T) {
+	t.Parallel()
+
+	const mirror = "mirror.internal.example"
+
+	// Compose threads ComposeRequest.RegistryURL into base rendering, so the
+	// quickstart base's embedded git-clone module resolves through the mirror.
+	res, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
+		BaseTemplateID: "quickstart",
+		RegistryURL:    mirror,
+	})
+	require.NoError(t, err)
+	require.Contains(t, string(res.MainTF), mirror+"/coder/git-clone/coder")
+	require.NotContains(t, string(res.MainTF),
+		codersdk.DefaultTemplateBuilderRegistryURL+"/coder/git-clone/coder")
+
+	// With RegistryURL unset, the base falls back to the canonical default
+	// instead of rendering a registry-less source.
+	resDefault, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
+		BaseTemplateID: "quickstart",
+	})
+	require.NoError(t, err)
+	require.Contains(t, string(resDefault.MainTF),
+		codersdk.DefaultTemplateBuilderRegistryURL+"/coder/git-clone/coder")
+}
+
+// TestComposeNormalizesRegistryURL covers the boundary normalization Compose
+// applies to ComposeRequest.RegistryURL: a scheme and trailing slash are
+// stripped, an empty value defaults on the module path (not just the base), and
+// a value that would corrupt the Terraform source is rejected.
+func TestComposeNormalizesRegistryURL(t *testing.T) {
+	t.Parallel()
+
+	t.Run("StripsSchemeAndTrailingSlash", func(t *testing.T) {
+		t.Parallel()
+		res, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
+			BaseTemplateID: "quickstart",
+			RegistryURL:    "https://mirror.internal.example/",
+		})
+		require.NoError(t, err)
+		mainTF := string(res.MainTF)
+		require.Contains(t, mainTF, "mirror.internal.example/coder/git-clone/coder")
+		require.NotContains(t, mainTF, "https://mirror.internal.example")
+		require.NotContains(t, mainTF, "mirror.internal.example//coder")
+	})
+
+	t.Run("EmptyDefaultsOnModulePath", func(t *testing.T) {
+		t.Parallel()
+		// CODER_TEMPLATE_BUILDER_REGISTRY_URL= (present but empty) reaches Compose
+		// as ""; the module path must default too, not render a registry-less source.
+		res, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
+			BaseTemplateID: "docker",
+			Modules:        []templatebuilder.ComposeModule{{ID: "code-server"}},
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, res.ModulesTF)
+		require.Contains(t, string(res.ModulesTF),
+			codersdk.DefaultTemplateBuilderRegistryURL+"/coder/code-server/coder")
+		require.NotContains(t, string(res.ModulesTF), `"/coder/code-server/coder"`)
+	})
+
+	t.Run("RejectsQuote", func(t *testing.T) {
+		t.Parallel()
+		_, err := templatebuilder.Compose(templatebuilder.ComposeRequest{
+			BaseTemplateID: "quickstart",
+			RegistryURL:    `mirror.example.com/"`,
+		})
+		require.Error(t, err)
+	})
 }
 
 // extractTar reads a tar archive and returns a map of filename to content.

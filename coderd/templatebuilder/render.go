@@ -21,7 +21,10 @@ type ImageOption struct {
 type BaseRenderContext struct {
 	ContainerImage string
 	ImageOptions   []ImageOption
-	Variables      map[string]string
+	// RegistryBase is the module registry URL from the deployment config
+	// (CODER_TEMPLATE_BUILDER_REGISTRY_URL).
+	RegistryBase string
+	Variables    map[string]string
 }
 
 // ModuleRenderContext is the data passed to module .tf.tmpl files.

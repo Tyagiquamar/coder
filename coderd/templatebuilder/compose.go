@@ -6,10 +6,13 @@ import (
 	"maps"
 	"path"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"golang.org/x/xerrors"
+
+	"github.com/coder/coder/v2/codersdk"
 )
 
 // ComposeRequest describes which base template and modules to render.
@@ -53,7 +56,16 @@ type ComposeResult struct {
 // source files. It extracts the coder_agent resource name from the
 // rendered base HCL and wires it into each module block.
 func Compose(req ComposeRequest) (*ComposeResult, error) {
-	mainTF, err := renderBase(req.BaseTemplateID, req.BaseVariableValues)
+	// Normalize and default the registry once here so the base and module render
+	// paths see the same canonical host; a scheme, trailing slash, or empty value
+	// would otherwise render a source that fails terraform init.
+	registryBase, err := normalizeRegistryURL(req.RegistryURL)
+	if err != nil {
+		return nil, err
+	}
+	req.RegistryURL = registryBase
+
+	mainTF, err := renderBase(req.BaseTemplateID, req.BaseVariableValues, req.RegistryURL)
 	if err != nil {
 		return nil, err
 	}
@@ -107,13 +119,43 @@ func formatHCL(src []byte) []byte {
 	return hclwrite.Format(src)
 }
 
-// renderBase renders the base template for the given example ID,
-// merging any user-supplied variable values into the render context.
-func renderBase(baseTemplateID string, baseVars map[string]string) ([]byte, error) {
+// normalizeRegistryURL canonicalizes the deployment's configured module registry
+// into the bare host a Terraform module source expects. It defaults an unset or
+// empty value to the public registry, strips an accidental scheme and trailing
+// slashes, and rejects a value containing whitespace or quotes that would
+// corrupt the rendered source. Running it once in Compose keeps the base and
+// module render paths consistent.
+func normalizeRegistryURL(registryURL string) (string, error) {
+	registryURL = strings.TrimSpace(registryURL)
+	if registryURL == "" {
+		// An unset or explicitly empty CODER_TEMPLATE_BUILDER_REGISTRY_URL falls
+		// back to the public registry rather than a registry-less source.
+		return codersdk.DefaultTemplateBuilderRegistryURL, nil
+	}
+	// A registry module source is a bare host: a scheme or trailing slash renders
+	// an address terraform rejects (e.g. https://mirror//coder/git-clone/coder).
+	registryURL = strings.TrimPrefix(registryURL, "https://")
+	registryURL = strings.TrimPrefix(registryURL, "http://")
+	registryURL = strings.TrimRight(registryURL, "/")
+	if registryURL == "" {
+		return "", xerrors.New("template builder registry URL has no host after removing scheme and slashes")
+	}
+	// Whitespace or quotes would break out of the Terraform source string.
+	if strings.ContainsAny(registryURL, " \t\r\n\"'") {
+		return "", xerrors.Errorf("template builder registry URL %q must be a bare host without whitespace or quotes", registryURL)
+	}
+	return registryURL, nil
+}
+
+// renderBase renders the base template for the given example ID, merging any
+// user-supplied variable values into the render context. Compose has already
+// normalized registryBase, so it is threaded in unconditionally.
+func renderBase(baseTemplateID string, baseVars map[string]string, registryBase string) ([]byte, error) {
 	renderCtx := DefaultBaseRenderContext(baseTemplateID)
 	if renderCtx.Variables == nil {
 		renderCtx.Variables = make(map[string]string)
 	}
+	renderCtx.RegistryBase = registryBase
 
 	vars, err := mergeBaseVariables(baseTemplateID, baseVars)
 	if err != nil {
@@ -252,7 +294,7 @@ func validateModules(requested []ComposeModule, catalog map[string]ModuleManifes
 func renderModules(
 	requested []ComposeModule,
 	catalog map[string]ModuleManifest,
-	registryURL, agentName string,
+	registryBase, agentName string,
 ) ([]byte, error) {
 	var buf bytes.Buffer
 	for _, cm := range requested {
@@ -268,7 +310,7 @@ func renderModules(
 			return nil, xerrors.Errorf("module %q: %w", cm.ID, err)
 		}
 		modCtx := ModuleRenderContext{
-			RegistryBase:      registryURL,
+			RegistryBase:      registryBase,
 			PinnedVersion:     manifest.PinnedVersion,
 			AgentResourceName: agentName,
 			Variables:         vars,
