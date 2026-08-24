@@ -1238,8 +1238,8 @@ func TestTools(t *testing.T) {
 						Workspace: workspace.Name,
 						Path:      "/tmp/file",
 						Edits: []workspacesdk.FileEdit{{
-							Search:  "hello",
-							Replace: "goodbye",
+							OldText: "hello",
+							NewText: "goodbye",
 						}},
 					})
 					return err
@@ -1253,8 +1253,8 @@ func TestTools(t *testing.T) {
 						Files: []workspacesdk.FileEdits{{
 							Path: "/tmp/file",
 							Edits: []workspacesdk.FileEdit{{
-								Search:  "hello",
-								Replace: "goodbye",
+								OldText: "hello",
+								NewText: "goodbye",
 							}},
 						}},
 					})
@@ -1450,8 +1450,8 @@ func TestTools(t *testing.T) {
 			Path:      filePath,
 			Edits: []workspacesdk.FileEdit{
 				{
-					Search:  "foo",
-					Replace: "bar",
+					OldText: "foo",
+					NewText: "bar",
 				},
 			},
 		})
@@ -1495,8 +1495,8 @@ func TestTools(t *testing.T) {
 					Path: filePath1,
 					Edits: []workspacesdk.FileEdit{
 						{
-							Search:  "foo1",
-							Replace: "bar1",
+							OldText: "foo1",
+							NewText: "bar1",
 						},
 					},
 				},
@@ -1504,8 +1504,8 @@ func TestTools(t *testing.T) {
 					Path: filePath2,
 					Edits: []workspacesdk.FileEdit{
 						{
-							Search:  "foo2",
-							Replace: "bar2",
+							OldText: "foo2",
+							NewText: "bar2",
 						},
 					},
 				},

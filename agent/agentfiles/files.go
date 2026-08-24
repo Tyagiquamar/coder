@@ -372,12 +372,50 @@ func (api *API) writeFile(ctx context.Context, r *http.Request, path string) (HT
 	return api.atomicWrite(ctx, path, mode, r.Body)
 }
 
+// rawFileEdit accepts the deprecated "search"/"replace" keys so
+// older coderd versions still on the pre-rename wire format keep
+// working during rollout (CODAGT-483). Remove the fallback once
+// every deployed coderd sends "old_text"/"new_text".
+type rawFileEdit struct {
+	OldText    string `json:"old_text"`
+	NewText    string `json:"new_text"`
+	Search     string `json:"search"`
+	Replace    string `json:"replace"`
+	ReplaceAll bool   `json:"replace_all"`
+}
+
 func (api *API) HandleEditFiles(rw http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	var req workspacesdk.FileEditRequest
-	if !httpapi.Read(ctx, rw, r, &req) {
+	var raw struct {
+		Files []struct {
+			Path  string        `json:"path"`
+			Edits []rawFileEdit `json:"edits"`
+		} `json:"files"`
+		IncludeDiff bool `json:"include_diff"`
+	}
+	if !httpapi.Read(ctx, rw, r, &raw) {
 		return
+	}
+
+	req := workspacesdk.FileEditRequest{IncludeDiff: raw.IncludeDiff}
+	for _, f := range raw.Files {
+		file := workspacesdk.FileEdits{Path: f.Path}
+		for _, e := range f.Edits {
+			oldText, newText := e.OldText, e.NewText
+			if oldText == "" {
+				oldText = e.Search
+			}
+			if newText == "" {
+				newText = e.Replace
+			}
+			file.Edits = append(file.Edits, workspacesdk.FileEdit{
+				OldText:    oldText,
+				NewText:    newText,
+				ReplaceAll: e.ReplaceAll,
+			})
+		}
+		req.Files = append(req.Files, file)
 	}
 
 	if len(req.Files) == 0 {
@@ -1103,8 +1141,8 @@ func buildReplacementLines(matched, searchLines []string, replace, forcedEnding 
 // lines) while letting the caller drive deliberate rewrites of
 // leading whitespace or endings.
 func fuzzyReplace(content string, edit workspacesdk.FileEdit) (string, error) {
-	search := edit.Search
-	replace := edit.Replace
+	search := edit.OldText
+	replace := edit.NewText
 
 	// An empty search string has no meaningful interpretation: it
 	// matches at every byte position, which means the caller has not
@@ -1112,7 +1150,7 @@ func fuzzyReplace(content string, edit workspacesdk.FileEdit) (string, error) {
 	// replace_all=true can't silently inject the replacement between
 	// every byte.
 	if search == "" {
-		return "", xerrors.New("search string must not be empty; include the " +
+		return "", xerrors.New("old_text must not be empty; include the " +
 			"text you want to match")
 	}
 
@@ -1159,8 +1197,8 @@ func fuzzyReplace(content string, edit workspacesdk.FileEdit) (string, error) {
 		}
 		count := strings.Count(content, search)
 		if count > 1 {
-			return "", xerrors.Errorf("search string matches %d occurrences "+
-				"(expected exactly 1). Include more surrounding "+
+			return "", xerrors.Errorf("old_text matches %d occurrences "+
+				"(expected exactly 1). Include more "+
 				"context to make the match unique, or set "+
 				"replace_all to true", count)
 		}
@@ -1171,8 +1209,8 @@ func fuzzyReplace(content string, edit workspacesdk.FileEdit) (string, error) {
 	if callerEndingIntent {
 		// Intent signaled but pass 1 missed; reject rather than let
 		// pass 2's CRLF/LF interchange bridge a mismatched search.
-		return "", xerrors.New("search string not found in file. Verify the search " +
-			"string matches the file content exactly, including whitespace, " +
+		return "", xerrors.New("old_text not found in file. Verify that old_text " +
+			"matches the file content exactly, including whitespace, " +
 			"indentation, and line endings")
 	}
 
@@ -1201,8 +1239,8 @@ func fuzzyReplace(content string, edit workspacesdk.FileEdit) (string, error) {
 		return result, err
 	}
 
-	msg := "search string not found in file. Verify the search " +
-		"string matches the file content exactly, including whitespace " +
+	msg := "old_text not found in file. Verify that old_text " +
+		"matches the file content exactly, including whitespace " +
 		"and indentation"
 	// miscount takes precedence: a near-match means the search is the
 	// model's typo'd new text, not a swapped field. Emitting both can
@@ -1222,8 +1260,8 @@ func fuzzyReplace(content string, edit workspacesdk.FileEdit) (string, error) {
 // truncation with " and N more".
 const maxHintLines = 5
 
-// inversionHint detects the case where the caller swapped `search`
-// and `replace`: search did not match but replace appears in the file.
+// inversionHint detects the case where the caller swapped `old_text`
+// and `new_text`: old_text did not match but new_text appears in the file.
 func inversionHint(
 	content string,
 	contentLines []string,
@@ -1246,8 +1284,8 @@ func inversionHint(
 		return ""
 	}
 	return fmt.Sprintf(
-		"Did you swap %q and %q? Your replace string appears at line %s",
-		"search", "replace", formatLineList(lines),
+		"Did you swap %q and %q? Your new_text string appears at line %s",
+		"old_text", "new_text", formatLineList(lines),
 	)
 }
 
@@ -1367,7 +1405,7 @@ func miscountHint(contentLines, searchLines []string) string {
 // formatMiscount renders one miscount candidate group.
 func formatMiscount(sCount int, r rune, cands []candidate) string {
 	var b strings.Builder
-	_, _ = fmt.Fprintf(&b, "Your search has %d %q (U+%04X); the file has ", sCount, string(r), r)
+	_, _ = fmt.Fprintf(&b, "Your old_text has %d %q (U+%04X); the file has ", sCount, string(r), r)
 	shown := min(len(cands), maxHintLines)
 	for i := 0; i < shown; i++ {
 		if i > 0 {
@@ -1505,8 +1543,8 @@ func fuzzyReplaceLines(
 
 	if !replaceAll {
 		if count := countLineMatches(contentLines, searchLines, eq); count > 1 {
-			return "", true, xerrors.Errorf("search string matches %d occurrences "+
-				"(expected exactly 1). Include more surrounding "+
+			return "", true, xerrors.Errorf("old_text matches %d occurrences "+
+				"(expected exactly 1). Include more "+
 				"context to make the match unique, or set "+
 				"replace_all to true", count)
 		}

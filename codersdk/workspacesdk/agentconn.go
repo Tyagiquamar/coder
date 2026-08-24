@@ -1180,8 +1180,8 @@ func DefaultReadFileLinesLimits() ReadFileLinesLimits {
 }
 
 type FileEdit struct {
-	Search     string `json:"search"`
-	Replace    string `json:"replace"`
+	OldText    string `json:"old_text"`
+	NewText    string `json:"new_text"`
 	ReplaceAll bool   `json:"replace_all,omitempty"`
 }
 
@@ -1370,7 +1370,7 @@ func (c *agentConn) SignalProcess(ctx context.Context, id string, signal string)
 	return nil
 }
 
-// EditFiles performs search and replace edits on one or more files.
+// EditFiles replaces old_text with new_text on one or more files.
 // When edits.IncludeDiff is true, the returned FileEditResponse
 // carries a unified diff per edited file.
 func (c *agentConn) EditFiles(ctx context.Context, edits FileEditRequest) (FileEditResponse, error) {
