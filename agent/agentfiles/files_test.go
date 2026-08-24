@@ -1312,20 +1312,20 @@ func TestHandleEditFiles_DeprecatedFieldNames(t *testing.T) {
 
 	tests := []struct {
 		name   string
-		body   string
 		target string
+		edit   map[string]string
 		want   string
 	}{
 		{
 			name:   "OldKeysAccepted",
 			target: "old-keys.txt",
-			body:   `{"files":[{"path":"%s","edits":[{"search":"hello","replace":"world"}]}]}`,
+			edit:   map[string]string{"search": "hello", "replace": "world"},
 			want:   "world",
 		},
 		{
 			name:   "NewKeysWinOverOld",
 			target: "both-keys.txt",
-			body:   `{"files":[{"path":"%s","edits":[{"old_text":"hello","new_text":"new","search":"hello","replace":"old"}]}]}`,
+			edit:   map[string]string{"old_text": "hello", "new_text": "new", "search": "hello", "replace": "old"},
 			want:   "new",
 		},
 	}
@@ -1336,10 +1336,22 @@ func TestHandleEditFiles_DeprecatedFieldNames(t *testing.T) {
 			path := filepath.Join(os.TempDir(), tt.target)
 			require.NoError(t, afero.WriteFile(fs, path, []byte("hello"), 0o644))
 
+			// Marshal the raw wire shape so the deprecated keys
+			// reach the endpoint and the path is escaped
+			// correctly on Windows.
+			type wireFile struct {
+				Path  string              `json:"path"`
+				Edits []map[string]string `json:"edits"`
+			}
+			body, err := json.Marshal(struct {
+				Files []wireFile `json:"files"`
+			}{Files: []wireFile{{Path: path, Edits: []map[string]string{tt.edit}}}})
+			require.NoError(t, err)
+
 			ctx := testutil.Context(t, testutil.WaitShort)
 			w := httptest.NewRecorder()
 			r := httptest.NewRequestWithContext(ctx, http.MethodPost, "/edit-files",
-				strings.NewReader(fmt.Sprintf(tt.body, path)))
+				bytes.NewReader(body))
 			api.Routes().ServeHTTP(w, r)
 			require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
 
