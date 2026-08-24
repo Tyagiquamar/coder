@@ -19,6 +19,7 @@ import { SecretsTable } from "./SecretsTable";
 
 type SecretsPageViewProps = {
 	secrets?: readonly UserSecret[];
+	filePathEnabled?: boolean;
 	isLoading: boolean;
 	hasLoaded: boolean;
 	isCreating: boolean;
@@ -46,6 +47,7 @@ type SecretDialogState =
 
 export const SecretsPageView: FC<SecretsPageViewProps> = ({
 	secrets = [],
+	filePathEnabled = true,
 	isLoading,
 	hasLoaded,
 	isCreating,
@@ -106,15 +108,16 @@ export const SecretsPageView: FC<SecretsPageViewProps> = ({
 			>
 				<SettingsHeaderTitle>Secrets</SettingsHeaderTitle>
 				<SettingsHeaderDescription>
-					Secrets with an environment variable or file path are injected into
-					workspaces you own when they start. Each environment variable and file
-					path must be unique.
+					{filePathEnabled
+						? "Secrets are injected through unique environment variables, file paths, or both."
+						: "File path delivery is disabled. Environment variables still work; saved paths remain blocked until delivery is enabled."}
 				</SettingsHeaderDescription>
 			</SettingsHeader>
 
 			<SecretDialog
 				open={dialogState.open}
 				secret={dialogSecret}
+				filePathEnabled={filePathEnabled}
 				isSubmitting={isCreating || isUpdating}
 				returnFocusElement={secretDialogReturnFocusElement.current}
 				onClose={closeSecretDialog}
@@ -128,6 +131,7 @@ export const SecretsPageView: FC<SecretsPageViewProps> = ({
 			<section className="flex flex-col gap-4">
 				<SecretsTable
 					secrets={secrets}
+					filePathEnabled={filePathEnabled}
 					isLoading={isLoading}
 					hasLoaded={hasLoadedSecrets}
 					isDeleting={isDeleting}
