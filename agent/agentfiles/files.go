@@ -407,10 +407,18 @@ func (api *API) HandleEditFiles(rw http.ResponseWriter, r *http.Request) {
 		file := f.FileEdits
 		file.Edits = nil
 		for _, e := range f.Edits {
-			if e.OldText == "" {
+			// Fall back to the deprecated keys only when both new
+			// fields are empty, which identifies an old-coderd
+			// caller still on the pre-rename wire format. If
+			// either new field is set, the request uses the new
+			// wire format and the deprecated keys must not
+			// override it, including an explicitly empty new_text
+			// that deletes the matched text. There is no valid
+			// edit where both new fields are empty and the
+			// deprecated keys should be ignored: an empty
+			// old_text is rejected downstream either way.
+			if e.OldText == "" && e.NewText == "" {
 				e.OldText = e.Search
-			}
-			if e.NewText == "" {
 				e.NewText = e.Replace
 			}
 			file.Edits = append(file.Edits, e.FileEdit)

@@ -1328,6 +1328,12 @@ func TestHandleEditFiles_DeprecatedFieldNames(t *testing.T) {
 			edit:   map[string]string{"old_text": "hello", "new_text": "new", "search": "hello", "replace": "old"},
 			want:   "new",
 		},
+		{
+			name:   "NewKeysEmptyNewTextNotOverwritten",
+			target: "empty-new-text.txt",
+			edit:   map[string]string{"old_text": "hello", "new_text": "", "search": "hello", "replace": "junk"},
+			want:   "",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
