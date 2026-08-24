@@ -7418,6 +7418,7 @@ CreateWorkspaceRequest provides options for creating a new workspace. Only one o
     "disable_owner_workspace_exec": true,
     "disable_password_auth": true,
     "disable_path_apps": true,
+    "disable_user_secret_file_path": true,
     "disable_workspace_sharing": true,
     "docs_url": {
       "forceQuery": true,
@@ -8046,6 +8047,7 @@ CreateWorkspaceRequest provides options for creating a new workspace. Only one o
   "disable_owner_workspace_exec": true,
   "disable_password_auth": true,
   "disable_path_apps": true,
+  "disable_user_secret_file_path": true,
   "disable_workspace_sharing": true,
   "docs_url": {
     "forceQuery": true,
@@ -8441,6 +8443,7 @@ CreateWorkspaceRequest provides options for creating a new workspace. Only one o
 | `disable_owner_workspace_exec`                 | boolean                                                                                              | false    |              |                                                                    |
 | `disable_password_auth`                        | boolean                                                                                              | false    |              |                                                                    |
 | `disable_path_apps`                            | boolean                                                                                              | false    |              |                                                                    |
+| `disable_user_secret_file_path`                | boolean                                                                                              | false    |              |                                                                    |
 | `disable_workspace_sharing`                    | boolean                                                                                              | false    |              |                                                                    |
 | `docs_url`                                     | [serpent.URL](#serpenturl)                                                                           | false    |              |                                                                    |
 | `enable_ai_tasks`                              | boolean                                                                                              | false    |              |                                                                    |
@@ -16553,16 +16556,16 @@ If the schedule is empty, the user will be updated to use the default schedule.|
 
 ### Properties
 
-| Name          | Type    | Required | Restrictions | Description                                                                                                                                                                                                                          |
-|---------------|---------|----------|--------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `created_at`  | string  | false    |              |                                                                                                                                                                                                                                      |
-| `description` | string  | false    |              |                                                                                                                                                                                                                                      |
-| `enabled`     | boolean | false    |              | Enabled controls whether the secret is injected into workspaces. Disabled secrets remain visible and editable, but are not added to the agent manifest, so they are not exposed as environment variables or written to secret files. |
-| `env_name`    | string  | false    |              |                                                                                                                                                                                                                                      |
-| `file_path`   | string  | false    |              |                                                                                                                                                                                                                                      |
-| `id`          | string  | false    |              |                                                                                                                                                                                                                                      |
-| `name`        | string  | false    |              |                                                                                                                                                                                                                                      |
-| `updated_at`  | string  | false    |              |                                                                                                                                                                                                                                      |
+| Name          | Type    | Required | Restrictions | Description                                                            |
+|---------------|---------|----------|--------------|------------------------------------------------------------------------|
+| `created_at`  | string  | false    |              |                                                                        |
+| `description` | string  | false    |              |                                                                        |
+| `enabled`     | boolean | false    |              | Enabled is stored intent. Deployment policy may block a stored target. |
+| `env_name`    | string  | false    |              |                                                                        |
+| `file_path`   | string  | false    |              |                                                                        |
+| `id`          | string  | false    |              |                                                                        |
+| `name`        | string  | false    |              |                                                                        |
+| `updated_at`  | string  | false    |              |                                                                        |
 
 ## codersdk.UserSkill
 

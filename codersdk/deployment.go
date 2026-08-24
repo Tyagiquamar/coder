@@ -736,6 +736,7 @@ type DeploymentValues struct {
 	DisableOwnerWorkspaceExec               serpent.Bool                         `json:"disable_owner_workspace_exec,omitempty" typescript:",notnull"`
 	DisableWorkspaceSharing                 serpent.Bool                         `json:"disable_workspace_sharing,omitempty" typescript:",notnull"`
 	DisableChatSharing                      serpent.Bool                         `json:"disable_chat_sharing,omitempty" typescript:",notnull"`
+	DisableUserSecretFilePath               serpent.Bool                         `json:"disable_user_secret_file_path,omitempty" typescript:",notnull"`
 	ProxyHealthStatusInterval               serpent.Duration                     `json:"proxy_health_status_interval,omitempty" typescript:",notnull"`
 	EnableTerraformDebugMode                serpent.Bool                         `json:"enable_terraform_debug_mode,omitempty" typescript:",notnull"`
 	UserQuietHoursSchedule                  UserQuietHoursScheduleConfig         `json:"user_quiet_hours_schedule,omitempty" typescript:",notnull"`
@@ -3780,6 +3781,15 @@ communicating directly.`,
 
 			Value: &c.DisableChatSharing,
 			YAML:  "disableChatSharing",
+		},
+		{
+			Name:        "Disable User Secret File Path",
+			Description: "Disable Coder-managed file path delivery for user secrets. Stored paths remain until users clear them and resume if this setting is turned off.",
+			Flag:        "user-secrets-disable-file-path",
+			Env:         "CODER_USER_SECRETS_DISABLE_FILE_PATH",
+
+			Value: &c.DisableUserSecretFilePath,
+			YAML:  "userSecretsDisableFilePath",
 		},
 		{
 			Name:        "Session Duration",

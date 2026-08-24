@@ -55,6 +55,11 @@ OPTIONS:
           the workspace serves malicious JavaScript. This is recommended for
           security purposes if a --wildcard-access-url is configured.
 
+      --user-secrets-disable-file-path bool, $CODER_USER_SECRETS_DISABLE_FILE_PATH
+          Disable Coder-managed file path delivery for user secrets. Stored
+          paths remain until users clear them and resume if this setting is
+          turned off.
+
       --disable-workspace-sharing bool, $CODER_DISABLE_WORKSPACE_SHARING
           Disable workspace sharing. Workspace ACL checking is disabled and only
           owners can have ssh, apps and terminal access to workspaces. Access

@@ -4325,11 +4325,9 @@ export interface CreateUserRequestWithOrgs {
 // From codersdk/usersecrets.go
 /**
  * CreateUserSecretRequest is the payload for creating a new user
- * secret. Name and Value are required. An enabled secret must have at
- * least one of EnvName or FilePath non-empty so it has an injection
- * target; to keep a secret without injecting it, set Enabled to false.
- * All other fields are optional and default to empty string. Enabled
- * defaults to true when omitted.
+ * secret. Name and Value are required. An enabled secret requires an
+ * effective target; deployment policy may reject FilePath and require EnvName.
+ * Enabled defaults to true.
  */
 export interface CreateUserSecretRequest {
 	readonly name: string;
@@ -4830,6 +4828,7 @@ export interface DeploymentValues {
 	readonly disable_owner_workspace_exec?: boolean;
 	readonly disable_workspace_sharing?: boolean;
 	readonly disable_chat_sharing?: boolean;
+	readonly disable_user_secret_file_path?: boolean;
 	readonly proxy_health_status_interval?: number;
 	readonly enable_terraform_debug_mode?: boolean;
 	readonly user_quiet_hours_schedule?: UserQuietHoursScheduleConfig;
@@ -10247,10 +10246,8 @@ export interface UpdateUserQuietHoursScheduleRequest {
 /**
  * UpdateUserSecretRequest is the payload for partially updating a
  * user secret. At least one field must be non-nil. Pointer fields
- * distinguish "not sent" (nil) from "set to empty string" (pointer
- * to empty string). If the post-update row is enabled it must still
- * have at least one of EnvName or FilePath non-empty; clearing both
- * targets is only allowed when the secret is (or becomes) disabled.
+ * distinguish "not sent" from "set empty". An enabled post-update row
+ * requires an effective target; deployment policy may require EnvName.
  */
 export interface UpdateUserSecretRequest {
 	readonly value?: string;
@@ -10755,10 +10752,7 @@ export interface UserSecret {
 	readonly env_name: string;
 	readonly file_path: string;
 	/**
-	 * Enabled controls whether the secret is injected into workspaces.
-	 * Disabled secrets remain visible and editable, but are not added
-	 * to the agent manifest, so they are not exposed as environment
-	 * variables or written to secret files.
+	 * Enabled is stored intent. Deployment policy may block a stored target.
 	 */
 	readonly enabled: boolean;
 	readonly created_at: string;

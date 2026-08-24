@@ -12146,6 +12146,18 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/codersdk.UserSecret"
                         }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/codersdk.Response"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/codersdk.Response"
+                        }
                     }
                 },
                 "security": [
@@ -12337,6 +12349,18 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/codersdk.UserSecret"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/codersdk.Response"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/codersdk.Response"
                         }
                     }
                 },
@@ -21719,6 +21743,9 @@ const docTemplate = `{
                 "disable_path_apps": {
                     "type": "boolean"
                 },
+                "disable_user_secret_file_path": {
+                    "type": "boolean"
+                },
                 "disable_workspace_sharing": {
                     "type": "boolean"
                 },
@@ -28954,7 +28981,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "enabled": {
-                    "description": "Enabled controls whether the secret is injected into workspaces.\nDisabled secrets remain visible and editable, but are not added\nto the agent manifest, so they are not exposed as environment\nvariables or written to secret files.",
+                    "description": "Enabled is stored intent. Deployment policy may block a stored target.",
                     "type": "boolean"
                 },
                 "env_name": {

@@ -1216,6 +1216,16 @@ Disable workspace sharing. Workspace ACL checking is disabled and only owners ca
 
 Disable chat sharing. Chat ACL checking is disabled and only owners can access their chats.
 
+### --user-secrets-disable-file-path
+
+|             |                                                    |
+|-------------|----------------------------------------------------|
+| Type        | <code>bool</code>                                  |
+| Environment | <code>$CODER_USER_SECRETS_DISABLE_FILE_PATH</code> |
+| YAML        | <code>userSecretsDisableFilePath</code>            |
+
+Disable Coder-managed file path delivery for user secrets. Stored paths remain until users clear them and resume if this setting is turned off.
+
 ### --session-duration
 
 |             |                                              |
