@@ -372,48 +372,48 @@ func (api *API) writeFile(ctx context.Context, r *http.Request, path string) (HT
 	return api.atomicWrite(ctx, path, mode, r.Body)
 }
 
-// rawFileEdit accepts the deprecated "search"/"replace" keys so
-// older coderd versions still on the pre-rename wire format keep
-// working during rollout (CODAGT-483). Remove the fallback once
-// every deployed coderd sends "old_text"/"new_text".
+// rawFileEdit embeds the wire types and adds the deprecated
+// "search"/"replace" keys so older coderd versions still on the
+// pre-rename wire format keep working during rollout (CODAGT-483).
+// Remove the fallback once every deployed coderd sends
+// "old_text"/"new_text".
 type rawFileEdit struct {
-	OldText    string `json:"old_text"`
-	NewText    string `json:"new_text"`
-	Search     string `json:"search"`
-	Replace    string `json:"replace"`
-	ReplaceAll bool   `json:"replace_all"`
+	workspacesdk.FileEdit
+	Search  string `json:"search"`
+	Replace string `json:"replace"`
+}
+
+type rawFileEdits struct {
+	workspacesdk.FileEdits
+	Edits []rawFileEdit `json:"edits"`
+}
+
+type rawFileEditRequest struct {
+	workspacesdk.FileEditRequest
+	Files []rawFileEdits `json:"files"`
 }
 
 func (api *API) HandleEditFiles(rw http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	var raw struct {
-		Files []struct {
-			Path  string        `json:"path"`
-			Edits []rawFileEdit `json:"edits"`
-		} `json:"files"`
-		IncludeDiff bool `json:"include_diff"`
-	}
+	var raw rawFileEditRequest
 	if !httpapi.Read(ctx, rw, r, &raw) {
 		return
 	}
 
-	req := workspacesdk.FileEditRequest{IncludeDiff: raw.IncludeDiff}
+	req := raw.FileEditRequest
+	req.Files = nil
 	for _, f := range raw.Files {
-		file := workspacesdk.FileEdits{Path: f.Path}
+		file := f.FileEdits
+		file.Edits = nil
 		for _, e := range f.Edits {
-			oldText, newText := e.OldText, e.NewText
-			if oldText == "" {
-				oldText = e.Search
+			if e.OldText == "" {
+				e.OldText = e.Search
 			}
-			if newText == "" {
-				newText = e.Replace
+			if e.NewText == "" {
+				e.NewText = e.Replace
 			}
-			file.Edits = append(file.Edits, workspacesdk.FileEdit{
-				OldText:    oldText,
-				NewText:    newText,
-				ReplaceAll: e.ReplaceAll,
-			})
+			file.Edits = append(file.Edits, e.FileEdit)
 		}
 		req.Files = append(req.Files, file)
 	}
