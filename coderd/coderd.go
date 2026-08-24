@@ -1565,6 +1565,7 @@ func New(options *Options) *API {
 				r.Put("/context", api.refreshChatContext)
 				r.Route("/queue/{queuedMessage}", func(r chi.Router) {
 					r.Delete("/", api.deleteChatQueuedMessage)
+					r.Patch("/", api.patchChatQueuedMessage)
 					r.Post("/promote", api.promoteChatQueuedMessage)
 				})
 				r.Route("/debug", func(r chi.Router) {

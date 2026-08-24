@@ -90,13 +90,14 @@ interface EditingState {
 	initialEditorState: string | undefined;
 	remountKey: number;
 	editingMessageId: number | null;
+	editingQueuedMessageId: number | null;
 	editingFileBlocks: readonly ChatMessagePart[];
 	handleEditUserMessage: (
 		messageId: number,
 		text: string,
 		fileBlocks?: readonly ChatMessagePart[],
 	) => void;
-	handleCancelHistoryEdit: () => void;
+	handleCancelEdit: () => void;
 	handleSendFromInput: (
 		message: string,
 		attachments?: readonly PendingAttachment[],
@@ -192,6 +193,7 @@ interface AgentChatPageViewProps {
 	handleInterrupt: () => void;
 	handleDeleteQueuedMessage: (id: number) => Promise<void>;
 	handlePromoteQueuedMessage: (id: number) => Promise<void>;
+	handleEditQueuedMessage: (id: number) => void;
 
 	onImplementPlan?: () => Promise<void> | void;
 	onSendAskUserQuestionResponse?: (message: string) => Promise<void> | void;
@@ -373,6 +375,7 @@ export const AgentChatPageView: FC<AgentChatPageViewProps> = ({
 	handleInterrupt,
 	handleDeleteQueuedMessage,
 	handlePromoteQueuedMessage,
+	handleEditQueuedMessage,
 	onImplementPlan,
 	onSendAskUserQuestionResponse,
 	handleArchiveAgentAction,
@@ -828,7 +831,9 @@ export const AgentChatPageView: FC<AgentChatPageViewProps> = ({
 		};
 	});
 
-	const isEditing = editing.editingMessageId !== null;
+	const isEditing =
+		editing.editingMessageId !== null ||
+		editing.editingQueuedMessageId !== null;
 
 	const chatOwnerUsername = chatOwner?.username?.trim();
 	const chatOwnerLabel =
@@ -999,6 +1004,9 @@ export const AgentChatPageView: FC<AgentChatPageViewProps> = ({
 								onSend={editing.handleSendFromInput}
 								onDeleteQueuedMessage={handleDeleteQueuedMessage}
 								onPromoteQueuedMessage={handlePromoteQueuedMessage}
+								onEditQueuedMessage={
+									isOtherUserReadOnly ? undefined : handleEditQueuedMessage
+								}
 								onInterrupt={handleInterrupt}
 								isInputDisabled={isInputDisabled}
 								isSendPending={isSubmissionPending}
@@ -1030,7 +1038,7 @@ export const AgentChatPageView: FC<AgentChatPageViewProps> = ({
 								remountKey={editing.remountKey}
 								onContentChange={editing.handleContentChange}
 								isEditing={isEditing}
-								onCancelHistoryEdit={editing.handleCancelHistoryEdit}
+								onCancelEdit={editing.handleCancelEdit}
 								editingFileBlocks={editing.editingFileBlocks}
 								mcpServers={mcpServers}
 								selectedMCPServerIds={selectedMCPServerIds}

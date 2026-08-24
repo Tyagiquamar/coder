@@ -153,6 +153,20 @@ func applyDeleteQueuedMessage(t *testing.T, _ *testFixture, tx *chatstate.Tx, se
 	return err
 }
 
+func applyUpdateQueuedMessage(t *testing.T, _ *testFixture, tx *chatstate.Tx, seeded seededChat, _ chatstate.ExecutionState, result *transitionCaseResult) error {
+	t.Helper()
+	var targetQueueID int64
+	if len(seeded.queuedMessageIDs) > 0 {
+		targetQueueID = seeded.queuedMessageIDs[0]
+	}
+	var err error
+	result.updateQueuedMessage, err = tx.UpdateQueuedMessage(chatstate.UpdateQueuedMessageInput{
+		QueuedMessageID: targetQueueID,
+		Content:         mustMarshalParts(t, []codersdk.ChatMessagePart{codersdk.ChatMessageText(updatedQueuedText)}),
+	})
+	return err
+}
+
 func applyPromoteQueuedMessage(t *testing.T, _ *testFixture, tx *chatstate.Tx, seeded seededChat, _ chatstate.ExecutionState, result *transitionCaseResult) error {
 	t.Helper()
 	var targetQueueID int64
@@ -293,6 +307,8 @@ func defaultApplier(tr chatstate.Transition) applierFn {
 		return applyRequestCompaction
 	case chatstate.TransitionDeleteQueuedMessage:
 		return applyDeleteQueuedMessage
+	case chatstate.TransitionUpdateQueuedMessage:
+		return applyUpdateQueuedMessage
 	case chatstate.TransitionPromoteQueuedMessage:
 		return applyPromoteQueuedMessage
 	case chatstate.TransitionInterrupt:
@@ -344,6 +360,7 @@ type transitionCaseResult struct {
 	editMessage             chatstate.EditMessageResult
 	requestCompaction       chatstate.RequestCompactionResult
 	deleteQueuedMessage     chatstate.DeleteQueuedMessageResult
+	updateQueuedMessage     chatstate.UpdateQueuedMessageResult
 	promoteQueuedMessage    chatstate.PromoteQueuedMessageResult
 	interrupt               chatstate.InterruptResult
 	completeRequiresAction  chatstate.CompleteRequiresActionResult
@@ -805,6 +822,13 @@ func matrixCases() []transitionCaseSpec {
 		deleteQueuedCase(chatstate.StateA1, chatstate.StateA0, queueShapeDefault),
 		deleteQueuedCase(chatstate.StateA1, chatstate.StateA1, queueShapeMulti),
 
+		// UpdateQueuedMessage cases. Replacing content never changes
+		// queue cardinality, so the classified state is unchanged.
+		updateQueuedCase(chatstate.StateE1),
+		updateQueuedCase(chatstate.StateR1),
+		updateQueuedCase(chatstate.StateI1),
+		updateQueuedCase(chatstate.StateA1),
+
 		// PromoteQueuedMessage cases. E1/A1 pop the head into
 		// history; R1/I1 only reorder the queue without
 		// inserting history. R1/I1 has both a head-target
@@ -1263,6 +1287,42 @@ func deleteQueuedCase(from, want chatstate.ExecutionState, shape queueShape) tra
 		}
 	}
 	return spec
+}
+
+// updatedQueuedText is the replacement text applied by
+// UpdateQueuedMessage cases.
+const updatedQueuedText = "updated queued content"
+
+func updateQueuedCase(from chatstate.ExecutionState) transitionCaseSpec {
+	return transitionCaseSpec{
+		transition: chatstate.TransitionUpdateQueuedMessage,
+		from:       from,
+		want:       from,
+		apply:      applyUpdateQueuedMessage,
+		assert: func(ctx context.Context, t *testing.T, f *testFixture, seeded seededChat, base snapshotBaseline, result transitionCaseResult) {
+			afterQueue, err := f.DB.CountChatQueuedMessages(ctx, seeded.chatID)
+			require.NoError(t, err)
+			require.Equal(t, base.queueCount, afterQueue,
+				"UpdateQueuedMessage keeps the queue length unchanged")
+			after, err := f.DB.GetChatByID(ctx, seeded.chatID)
+			require.NoError(t, err)
+			require.Greater(t, after.QueueVersion, base.queueVersion,
+				"UpdateQueuedMessage advances queue_version")
+
+			require.NotEmpty(t, seeded.queuedMessageIDs)
+			targetID := seeded.queuedMessageIDs[0]
+			updated := result.updateQueuedMessage.UpdatedQueuedMessage
+			require.Equal(t, targetID, updated.ID,
+				"UpdateQueuedMessage returns the targeted queued message")
+			require.Contains(t, string(updated.Content), updatedQueuedText,
+				"UpdateQueuedMessage stores the replacement content")
+
+			require.Equal(t, base.queueIDs, queuedIDsByPosition(ctx, t, f, seeded.chatID),
+				"UpdateQueuedMessage preserves queue order")
+			require.Equal(t, base.historyIDs, activeHistoryIDs(ctx, t, f, seeded.chatID),
+				"UpdateQueuedMessage does not touch history")
+		},
+	}
 }
 
 func promoteQueuedCase(from, want chatstate.ExecutionState, shape queueShape, targetIdx int) transitionCaseSpec {

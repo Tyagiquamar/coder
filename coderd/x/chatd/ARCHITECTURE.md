@@ -110,6 +110,8 @@ I don't recommend reading the rest of section thoroughly if this is your first t
 
 ### Transitions used by the HTTP endpoints
 
+<!-- TODO: document the `UpdateQueuedMessage(qid, replacement)` transition added for in-place queued-message edits. -->
+
 - `Create(initialMessages)` creates a new chat, initializes `snapshot_version` to 1, inserts its initial history, and lands in `running`. The inserted initial history sets `history_version` to 1. Since the queue has not changed, `queue_version` remains 0. This transition is a special case: since the chat does not exist at the time it's run, the chat row cannot be locked before the transition is applied.
 - `SetArchived(archived)` sets or clears the archived marker for one chat.
 - `SendMessage(m, busy_behavior)` inserts a user message directly when the chat is idle, or queues it when the chat is busy. `busy_behavior` must be either `queue` or `interrupt`. With `busy_behavior=interrupt`, it also requests interruption or cancels a pending dynamic-tool action as needed.
@@ -135,6 +137,8 @@ I don't recommend reading the rest of section thoroughly if this is your first t
 - `ReconcileInvalidState` reconciles a chat in an invalid state by setting it to a valid state. Defined in the [Invalid states](#invalid-states) section.
 
 ### Execution state transition diagram
+
+<!-- TODO: add the `UpdateQueuedMessage` self-edges (E1 -> E1, R1 -> R1, I1 -> I1, A1 -> A1) to the diagram below. -->
 
 Now comes maybe the densest part of this document. It's a diagram that shows all the possible transitions between all the execution states. Again, I don't recommend reading the diagram thoroughly at first. Take a quick look to get a sense of what it's about and treat is as a reference you can return to later. I recommend reading the diagram as text and not looking at the rendered visual. The text is clearer.
 
@@ -514,6 +518,8 @@ This endpoint uses `DeleteQueuedMessage(qid)`:
 - `A1 -> DeleteQueuedMessage(qid) -> A1` if the queue remains non-empty
 
 No other input states are supported.
+
+<!-- TODO: document `PATCH /api/experimental/chats/{chat}/queue/{queuedMessage}`, which replaces queued content in place through `UpdateQueuedMessage(qid, replacement)` and keeps the message queued at its current position. -->
 
 ### `POST /api/experimental/chats/{chat}/queue/{queuedMessage}/promote`
 

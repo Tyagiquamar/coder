@@ -47,6 +47,7 @@ import {
 	patchChatEntity,
 	promoteChatQueuedMessage,
 	updateChatPlanMode,
+	updateChatQueuedMessage,
 	updateChatWorkspace,
 	updateInfiniteChatsCache,
 	userChatDebugLogging,
@@ -101,6 +102,7 @@ import {
 	useChatSelector,
 	useChatStore,
 } from "./components/ChatConversation/chatStore";
+import { getEditableContentPayload } from "./components/ChatConversation/messageParsing";
 import { useChatToolInvalidations } from "./components/ChatConversation/useChatToolInvalidations";
 import type { PendingAttachment } from "./components/ChatPageContent";
 import { workspaceSkillsFromChat } from "./components/ChatPageContent";
@@ -510,6 +512,7 @@ export function useConversationEditingState(deps: {
 		message: string,
 		attachments?: readonly PendingAttachment[],
 		editedMessageID?: number,
+		editedQueuedMessageID?: number,
 	) => Promise<void>;
 	chatInputRef: React.RefObject<ChatMessageInputRef | null>;
 	inputValueRef: React.RefObject<string>;
@@ -551,30 +554,46 @@ export function useConversationEditingState(deps: {
 
 	// -- History editing state --
 	const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
-	const [draftBeforeHistoryEdit, setDraftBeforeHistoryEdit] =
-		useState<ParsedDraft | null>(null);
+	// -- Queued message editing state --
+	// Editing a queued message reuses the same composer state as a
+	// history edit, but submits an in-place queue update instead of a
+	// new turn. Only one of the two targets can be active at a time.
+	const [editingQueuedMessageId, setEditingQueuedMessageId] = useState<
+		number | null
+	>(null);
+	const [draftBeforeEdit, setDraftBeforeEdit] = useState<ParsedDraft | null>(
+		null,
+	);
 	const [editingFileBlocks, setEditingFileBlocks] = useState<
 		readonly ChatMessagePart[]
 	>([]);
 
-	const handleEditUserMessage = (
-		messageId: number,
+	const isEditingAnyMessage =
+		editingMessageId !== null || editingQueuedMessageId !== null;
+
+	// Saves the composer draft the first time an edit starts so
+	// canceling can restore it.
+	const captureDraftBeforeEdit = () => {
+		if (isEditingAnyMessage) {
+			return;
+		}
+		// Read the current serialized editor state from localStorage
+		// (kept up-to-date by handleContentChange) rather than from
+		// the stale initialEditorState React state.
+		const currentEditorState = draftStorageKey
+			? parseStoredDraft(localStorage.getItem(draftStorageKey)).editorState
+			: undefined;
+		setDraftBeforeEdit({
+			text: inputValueRef.current,
+			editorState: currentEditorState,
+		});
+	};
+
+	// Loads the edited text into a freshly mounted composer.
+	const loadEditedTextIntoComposer = (
 		text: string,
 		fileBlocks?: readonly ChatMessagePart[],
 	) => {
-		if (editingMessageId === null) {
-			// Read the current serialized editor state from localStorage
-			// (kept up-to-date by handleContentChange) rather than from
-			// the stale initialEditorState React state.
-			const currentEditorState = draftStorageKey
-				? parseStoredDraft(localStorage.getItem(draftStorageKey)).editorState
-				: undefined;
-			setDraftBeforeHistoryEdit({
-				text: inputValueRef.current,
-				editorState: currentEditorState,
-			});
-		}
-		setEditingMessageId(messageId);
 		setDraftState({
 			editorInitialValue: text,
 			initialEditorState: undefined,
@@ -585,9 +604,31 @@ export function useConversationEditingState(deps: {
 		setEditingFileBlocks(fileBlocks ?? []);
 	};
 
-	const handleCancelHistoryEdit = () => {
-		const savedText = draftBeforeHistoryEdit?.text ?? "";
-		const savedState = draftBeforeHistoryEdit?.editorState;
+	const handleEditUserMessage = (
+		messageId: number,
+		text: string,
+		fileBlocks?: readonly ChatMessagePart[],
+	) => {
+		captureDraftBeforeEdit();
+		setEditingQueuedMessageId(null);
+		setEditingMessageId(messageId);
+		loadEditedTextIntoComposer(text, fileBlocks);
+	};
+
+	const handleEditQueuedMessage = (
+		queuedMessageId: number,
+		text: string,
+		fileBlocks?: readonly ChatMessagePart[],
+	) => {
+		captureDraftBeforeEdit();
+		setEditingMessageId(null);
+		setEditingQueuedMessageId(queuedMessageId);
+		loadEditedTextIntoComposer(text, fileBlocks);
+	};
+
+	const handleCancelEdit = () => {
+		const savedText = draftBeforeEdit?.text ?? "";
+		const savedState = draftBeforeEdit?.editorState;
 		setDraftState({
 			editorInitialValue: savedText,
 			initialEditorState: savedState,
@@ -596,23 +637,26 @@ export function useConversationEditingState(deps: {
 		setRemountKey((k) => k + 1);
 		inputValueRef.current = savedText;
 		setEditingMessageId(null);
-		setDraftBeforeHistoryEdit(null);
+		setEditingQueuedMessageId(null);
+		setDraftBeforeEdit(null);
 		setEditingFileBlocks([]);
 	};
 
 	// Clears the composer for an in-flight history edit and
 	// returns a rollback function that restores the editing draft
 	// if the send fails.
-	const clearInputForHistoryEdit = (message: string) => {
+	const clearInputForEdit = (message: string) => {
 		const snapshot = {
 			editorState: serializedEditorStateRef.current,
 			fileBlocks: editingFileBlocks,
 			messageId: editingMessageId,
+			queuedMessageId: editingQueuedMessageId,
 		};
 
 		chatInputRef.current?.clear();
 		inputValueRef.current = "";
 		setEditingMessageId(null);
+		setEditingQueuedMessageId(null);
 
 		return () => {
 			setDraftState({
@@ -623,12 +667,13 @@ export function useConversationEditingState(deps: {
 			setRemountKey((k) => k + 1);
 			inputValueRef.current = message;
 			setEditingMessageId(snapshot.messageId);
+			setEditingQueuedMessageId(snapshot.queuedMessageId);
 			setEditingFileBlocks(snapshot.fileBlocks);
 		};
 	};
 
 	// Clears all input and editing state after a successful send.
-	const finalizeSuccessfulSend = (editedMessageID: number | undefined) => {
+	const finalizeSuccessfulSend = (isEdit: boolean) => {
 		chatInputRef.current?.clear();
 		if (!isMobileViewport()) {
 			chatInputRef.current?.focus();
@@ -638,8 +683,8 @@ export function useConversationEditingState(deps: {
 		if (draftStorageKey) {
 			localStorage.removeItem(draftStorageKey);
 		}
-		if (editedMessageID !== undefined) {
-			setDraftBeforeHistoryEdit(null);
+		if (isEdit) {
+			setDraftBeforeEdit(null);
 			setEditingFileBlocks([]);
 		}
 	};
@@ -651,14 +696,20 @@ export function useConversationEditingState(deps: {
 	) => {
 		const editedMessageID =
 			editingMessageId !== null ? editingMessageId : undefined;
-		const sendPromise = onSend(message, attachments, editedMessageID);
+		const editedQueuedMessageID =
+			editingQueuedMessageId !== null ? editingQueuedMessageId : undefined;
+		const isEdit =
+			editedMessageID !== undefined || editedQueuedMessageID !== undefined;
+		const sendPromise = onSend(
+			message,
+			attachments,
+			editedMessageID,
+			editedQueuedMessageID,
+		);
 
-		// For history edits, clear input immediately and prepare
+		// For edits, clear input immediately and prepare
 		// a rollback in case the send fails.
-		const rollback =
-			editedMessageID !== undefined
-				? clearInputForHistoryEdit(message)
-				: undefined;
+		const rollback = isEdit ? clearInputForEdit(message) : undefined;
 
 		try {
 			await sendPromise;
@@ -670,7 +721,7 @@ export function useConversationEditingState(deps: {
 			throw error;
 		}
 
-		finalizeSuccessfulSend(editedMessageID);
+		finalizeSuccessfulSend(isEdit);
 	};
 
 	const handleContentChange = (
@@ -681,9 +732,9 @@ export function useConversationEditingState(deps: {
 		inputValueRef.current = content;
 		serializedEditorStateRef.current = serializedEditorState;
 
-		// Don't overwrite the persisted draft while editing a history message.
+		// Don't overwrite the persisted draft while editing a message.
 		// The original draft is saved in React state and should survive a cancel.
-		if (editingMessageId !== null) {
+		if (isEditingAnyMessage) {
 			return;
 		}
 
@@ -723,9 +774,11 @@ export function useConversationEditingState(deps: {
 		initialEditorState,
 		remountKey,
 		editingMessageId,
+		editingQueuedMessageId,
 		editingFileBlocks,
 		handleEditUserMessage,
-		handleCancelHistoryEdit,
+		handleEditQueuedMessage,
+		handleCancelEdit,
 		handleSendFromInput,
 		handleContentChange,
 		handleLoadingDraftChange,
@@ -1200,6 +1253,9 @@ const AgentChatPage: FC = () => {
 	const { mutateAsync: promoteQueuedMessage } = useMutation(
 		promoteChatQueuedMessage(queryClient, agentId ?? ""),
 	);
+	const { mutateAsync: updateQueuedMessage } = useMutation(
+		updateChatQueuedMessage(queryClient, agentId ?? ""),
+	);
 	const updateChatWorkspaceBase = updateChatWorkspace(queryClient);
 	const {
 		isPending: isUpdateChatWorkspacePending,
@@ -1498,6 +1554,21 @@ const AgentChatPage: FC = () => {
 		editing.handleEditUserMessage(...args);
 	};
 
+	// The queue list only knows the message ID, so the text and file
+	// parts are resolved from the live queue snapshot here.
+	const handleEditQueuedMessage = (id: number) => {
+		const queuedMessage = store
+			.getSnapshot()
+			.queuedMessages.find((message) => message.id === id);
+		if (!queuedMessage) {
+			return;
+		}
+		const { text, fileBlocks } = getEditableContentPayload(
+			queuedMessage.content,
+		);
+		editing.handleEditQueuedMessage(id, text, fileBlocks);
+	};
+
 	const chatTitle = chatQuery.data?.title;
 
 	const titleElement = (
@@ -1650,12 +1721,14 @@ const AgentChatPage: FC = () => {
 		message,
 		attachments,
 		editedMessageID,
+		editedQueuedMessageID,
 		useComposerContent = true,
 		planModeSwitch,
 	}: {
 		message: string;
 		attachments?: readonly PendingAttachment[];
 		editedMessageID?: number;
+		editedQueuedMessageID?: number;
 		useComposerContent?: boolean;
 		planModeSwitch?: PlanModeSwitch;
 	}) {
@@ -1673,6 +1746,32 @@ const AgentChatPage: FC = () => {
 			pendingPlanModeSyncRef.current,
 			pendingWorkspaceSyncRef.current,
 		]);
+
+		// A queued-message edit replaces the stored content in place.
+		// The message keeps its queue position and stays queued, so no
+		// turn is started and chat status is untouched.
+		if (editedQueuedMessageID !== undefined) {
+			let response: Awaited<ReturnType<typeof updateQueuedMessage>>;
+			try {
+				response = await updateQueuedMessage({
+					queuedMessageId: editedQueuedMessageID,
+					req: { content },
+				});
+			} catch (error) {
+				handleRequestError(error);
+				throw error;
+			}
+			const updatedQueue = store
+				.getSnapshot()
+				.queuedMessages.map((queuedMessage) =>
+					queuedMessage.id === response.queued_message.id
+						? response.queued_message
+						: queuedMessage,
+				);
+			store.setQueuedMessages(updatedQueue);
+			setCacheQueuedMessages(updatedQueue);
+			return;
+		}
 
 		// "/compact" on its own (no attachments or file references)
 		// requests a manual context compaction instead of sending a
@@ -1900,11 +1999,13 @@ const AgentChatPage: FC = () => {
 		message: string,
 		attachments?: readonly PendingAttachment[],
 		editedMessageID?: number,
+		editedQueuedMessageID?: number,
 	) {
 		await submitChatTurn({
 			message,
 			attachments,
 			editedMessageID,
+			editedQueuedMessageID,
 		});
 	}
 
@@ -2062,6 +2163,7 @@ const AgentChatPage: FC = () => {
 			handleInterrupt={handleInterrupt}
 			handleDeleteQueuedMessage={handleDeleteQueuedMessage}
 			handlePromoteQueuedMessage={handlePromoteQueuedMessage}
+			handleEditQueuedMessage={handleEditQueuedMessage}
 			onImplementPlan={handleImplementPlan}
 			onSendAskUserQuestionResponse={handleSendAskUserQuestionResponse}
 			handleArchiveAgentAction={handleArchiveAgentAction}

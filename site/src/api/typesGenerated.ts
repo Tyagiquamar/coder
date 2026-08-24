@@ -9853,6 +9853,23 @@ export interface UpdateChatProviderConfigRequest {
 
 // From codersdk/chats.go
 /**
+ * UpdateChatQueuedMessageRequest is the request to replace the content
+ * of a queued message. The message keeps its queue position.
+ */
+export interface UpdateChatQueuedMessageRequest {
+	readonly content: readonly ChatInputPart[];
+}
+
+// From codersdk/chats.go
+/**
+ * UpdateChatQueuedMessageResponse contains the updated queued message.
+ */
+export interface UpdateChatQueuedMessageResponse {
+	readonly queued_message: ChatQueuedMessage;
+}
+
+// From codersdk/chats.go
+/**
  * UpdateChatRequest is the request to update a chat.
  */
 export interface UpdateChatRequest {

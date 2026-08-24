@@ -153,9 +153,10 @@ interface AgentChatInputProps {
 	queuedMessages?: readonly ChatQueuedMessage[];
 	onDeleteQueuedMessage?: (id: number) => Promise<void> | void;
 	onPromoteQueuedMessage?: (id: number) => Promise<void> | void;
+	onEditQueuedMessage?: (id: number) => void;
 	// History editing state, owned by the parent.
-	isEditingHistoryMessage?: boolean;
-	onCancelHistoryEdit?: () => void;
+	isEditingMessage?: boolean;
+	onCancelEdit?: () => void;
 	// Newest-first list of non-empty user prompts for local history cycling.
 	userPromptHistory?: readonly string[];
 
@@ -376,8 +377,9 @@ export const AgentChatInput: FC<AgentChatInputProps> = ({
 	queuedMessages = [],
 	onDeleteQueuedMessage,
 	onPromoteQueuedMessage,
-	isEditingHistoryMessage = false,
-	onCancelHistoryEdit,
+	onEditQueuedMessage,
+	isEditingMessage = false,
+	onCancelEdit,
 	userPromptHistory = [],
 	contextUsage,
 	onRefreshContext,
@@ -891,7 +893,8 @@ export const AgentChatInput: FC<AgentChatInputProps> = ({
 		const text = internalRef.current?.getValue()?.trim() ?? "";
 
 		// If the input is empty and there are queued messages,
-		// promote the first one instead of submitting.
+		// promote the first one instead of submitting. While editing,
+		// an empty composer must not promote anything.
 		if (
 			!text &&
 			!hasUploadedAttachments &&
@@ -899,6 +902,7 @@ export const AgentChatInput: FC<AgentChatInputProps> = ({
 			!isDisabled &&
 			!isLoading &&
 			!hasActiveUploads &&
+			!isEditingMessage &&
 			queuedMessages.length > 0 &&
 			onPromoteQueuedMessage
 		) {
@@ -947,9 +951,9 @@ export const AgentChatInput: FC<AgentChatInputProps> = ({
 
 	const handleComposerKeyDown = (e: React.KeyboardEvent) => {
 		if (e.key === "Escape") {
-			if (isEditingHistoryMessage) {
+			if (isEditingMessage) {
 				e.preventDefault();
-				onCancelHistoryEdit?.();
+				onCancelEdit?.();
 			} else if (isStreaming && onInterrupt && !isInterruptPending) {
 				e.preventDefault();
 				onInterrupt();
@@ -976,7 +980,7 @@ export const AgentChatInput: FC<AgentChatInputProps> = ({
 		// streaming so the user can prepare the next prompt. Escape is
 		// cycle-aware so it does not accidentally interrupt streaming.
 		const isPromptCyclingSuppressed =
-			isEditingHistoryMessage || isDisabled || isLoading;
+			isEditingMessage || isDisabled || isLoading;
 		if (isPromptCyclingSuppressed) {
 			return;
 		}
@@ -1039,7 +1043,7 @@ export const AgentChatInput: FC<AgentChatInputProps> = ({
 		applyCycleValue(nextPrompt);
 	};
 
-	const sendButtonLabel = isEditingHistoryMessage ? "Save Edit" : "Send";
+	const sendButtonLabel = isEditingMessage ? "Save Edit" : "Send";
 	const sendShortcutLabel =
 		sendShortcut === MODIFIER_AGENT_CHAT_SEND_SHORTCUT
 			? "Cmd/Ctrl+Enter"
@@ -1054,7 +1058,7 @@ export const AgentChatInput: FC<AgentChatInputProps> = ({
 			className={cn(
 				"mx-auto w-full pb-0 sm:pb-4",
 				chatWidthClass(chatFullWidth),
-				isEditingHistoryMessage && "pt-1",
+				isEditingMessage && "pt-1",
 			)}
 		>
 			{queuedMessages.length > 0 && (
@@ -1062,6 +1066,7 @@ export const AgentChatInput: FC<AgentChatInputProps> = ({
 					messages={queuedMessages}
 					onDelete={(id) => onDeleteQueuedMessage?.(id)}
 					onPromote={(id) => onPromoteQueuedMessage?.(id)}
+					onEdit={onEditQueuedMessage}
 					className="mb-2"
 				/>
 			)}
@@ -1095,7 +1100,7 @@ export const AgentChatInput: FC<AgentChatInputProps> = ({
 					"relative z-10 rounded-2xl bg-surface-secondary sm:bg-surface-secondary/45 p-1 shadow-sm has-[textarea:focus]:ring-2 has-[textarea:focus]:ring-content-link/40",
 					showAgentSetupNotice && "sm:bg-surface-secondary",
 					isDragging && "ring-2 ring-content-link/40",
-					isEditingHistoryMessage &&
+					isEditingMessage &&
 						"shadow-[0_0_0_2px_hsla(var(--border-warning),0.6)]",
 				)}
 				onKeyDown={handleComposerKeyDown}
@@ -1103,7 +1108,7 @@ export const AgentChatInput: FC<AgentChatInputProps> = ({
 				onDragLeave={onAttach ? handleDragLeave : undefined}
 				onDrop={onAttach ? handleDrop : undefined}
 			>
-				{isEditingHistoryMessage && (
+				{isEditingMessage && (
 					<div className="flex items-center justify-between border-b border-border-default/70 px-3 py-1.5">
 						<span className="flex items-center gap-1.5 text-xs font-medium text-content-warning">
 							<PencilIcon className="size-3.5" />
@@ -1115,7 +1120,7 @@ export const AgentChatInput: FC<AgentChatInputProps> = ({
 							variant="subtle"
 							size="icon"
 							aria-label="Cancel editing"
-							onClick={onCancelHistoryEdit}
+							onClick={onCancelEdit}
 							disabled={isLoading}
 							className="size-6 rounded text-content-warning hover:text-content-primary"
 						>
@@ -1564,7 +1569,7 @@ export const AgentChatInput: FC<AgentChatInputProps> = ({
 								isRefreshingContext={isRefreshingContext}
 							/>
 						)}
-						{isStreaming && onInterrupt && (
+						{isStreaming && !isEditingMessage && onInterrupt && (
 							<Tooltip>
 								<TooltipTrigger asChild>
 									<Button
@@ -1583,7 +1588,7 @@ export const AgentChatInput: FC<AgentChatInputProps> = ({
 								</TooltipContent>
 							</Tooltip>
 						)}
-						{isInterruptPending && isStreaming && (
+						{isInterruptPending && isStreaming && !isEditingMessage && (
 							// The disabled Stop button is skipped by Tab order, so the
 							// pending interruption is also announced through a live
 							// region and a tooltip.
@@ -1591,7 +1596,10 @@ export const AgentChatInput: FC<AgentChatInputProps> = ({
 								Interrupting. Waiting for the agent to stop.
 							</span>
 						)}
-						{!isStreaming && (
+						{/* While editing, saving the edit replaces stopping as the
+						    primary action, so a queued message can be saved during an
+						    active turn. */}
+						{(!isStreaming || isEditingMessage) && (
 							<Tooltip>
 								<TooltipTrigger asChild>
 									<Button

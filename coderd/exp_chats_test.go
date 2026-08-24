@@ -12283,6 +12283,226 @@ func TestDeleteChatQueuedMessage(t *testing.T) {
 	})
 }
 
+func TestUpdateChatQueuedMessage(t *testing.T) {
+	t.Parallel()
+
+	t.Run("KeepsQueuePosition", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testutil.Context(t, testutil.WaitLong)
+		client, db := newChatClientWithDatabase(t)
+		user := coderdtest.CreateFirstUser(t, client.Client)
+		modelConfig := createChatModel(t, client)
+
+		chat := dbgen.Chat(t, db, database.Chat{
+			OrganizationID:    user.OrganizationID,
+			OwnerID:           user.UserID,
+			LastModelConfigID: modelConfig.ID,
+			Title:             "update queued message route test",
+			Status:            database.ChatStatusError,
+		})
+
+		headContent, err := json.Marshal([]codersdk.ChatMessagePart{
+			codersdk.ChatMessageText("queued head"),
+		})
+		require.NoError(t, err)
+		head := insertTestChatQueuedMessage(ctx, t, db, chat.ID, headContent, modelConfig.ID)
+
+		tailContent, err := json.Marshal([]codersdk.ChatMessagePart{
+			codersdk.ChatMessageText("queued tail"),
+		})
+		require.NoError(t, err)
+		tail := insertTestChatQueuedMessage(ctx, t, db, chat.ID, tailContent, modelConfig.ID)
+
+		updated, err := client.UpdateChatQueuedMessage(ctx, chat.ID, tail.ID, codersdk.UpdateChatQueuedMessageRequest{
+			Content: []codersdk.ChatInputPart{{
+				Type: codersdk.ChatInputPartTypeText,
+				Text: "edited tail",
+			}},
+		})
+		require.NoError(t, err)
+		require.Equal(t, tail.ID, updated.QueuedMessage.ID)
+		require.Equal(t, "edited tail", updated.QueuedMessage.Content[0].Text)
+
+		messagesResult, err := client.GetChatMessages(ctx, chat.ID, nil)
+		require.NoError(t, err)
+		require.Len(t, messagesResult.QueuedMessages, 2)
+		require.Equal(t, head.ID, messagesResult.QueuedMessages[0].ID)
+		require.Equal(t, tail.ID, messagesResult.QueuedMessages[1].ID)
+		require.Equal(t, "queued head", messagesResult.QueuedMessages[0].Content[0].Text)
+		require.Equal(t, "edited tail", messagesResult.QueuedMessages[1].Content[0].Text)
+
+		stored, err := db.GetChatQueuedMessageByID(dbauthz.AsSystemRestricted(ctx), database.GetChatQueuedMessageByIDParams{
+			ID:     tail.ID,
+			ChatID: chat.ID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, tail.Position, stored.Position)
+	})
+
+	t.Run("MissingQueuedMessage", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testutil.Context(t, testutil.WaitLong)
+		client, db := newChatClientWithDatabase(t)
+		user := coderdtest.CreateFirstUser(t, client.Client)
+		modelConfig := createChatModel(t, client)
+
+		chat := dbgen.Chat(t, db, database.Chat{
+			OrganizationID:    user.OrganizationID,
+			OwnerID:           user.UserID,
+			LastModelConfigID: modelConfig.ID,
+			Title:             "update queued missing",
+			Status:            database.ChatStatusError,
+		})
+
+		// A queued message keeps the chat in a state that accepts
+		// queue edits, so the missing target is what fails.
+		queuedContent, err := json.Marshal([]codersdk.ChatMessagePart{
+			codersdk.ChatMessageText("queued"),
+		})
+		require.NoError(t, err)
+		insertTestChatQueuedMessage(ctx, t, db, chat.ID, queuedContent, modelConfig.ID)
+
+		_, err = client.UpdateChatQueuedMessage(ctx, chat.ID, 99999999, codersdk.UpdateChatQueuedMessageRequest{
+			Content: []codersdk.ChatInputPart{{
+				Type: codersdk.ChatInputPartTypeText,
+				Text: "edited",
+			}},
+		})
+		sdkErr := requireSDKError(t, err, http.StatusNotFound)
+		require.Equal(t, "Queued message not found.", sdkErr.Message)
+	})
+
+	t.Run("EmptyQueueReturnsConflict", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testutil.Context(t, testutil.WaitLong)
+		client, db := newChatClientWithDatabase(t)
+		user := coderdtest.CreateFirstUser(t, client.Client)
+		modelConfig := createChatModel(t, client)
+
+		chat := dbgen.Chat(t, db, database.Chat{
+			OrganizationID:    user.OrganizationID,
+			OwnerID:           user.UserID,
+			LastModelConfigID: modelConfig.ID,
+			Title:             "update queued empty queue",
+			Status:            database.ChatStatusError,
+		})
+
+		_, err := client.UpdateChatQueuedMessage(ctx, chat.ID, 99999999, codersdk.UpdateChatQueuedMessageRequest{
+			Content: []codersdk.ChatInputPart{{
+				Type: codersdk.ChatInputPartTypeText,
+				Text: "edited",
+			}},
+		})
+		requireSDKError(t, err, http.StatusConflict)
+	})
+
+	t.Run("InvalidQueuedMessageID", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testutil.Context(t, testutil.WaitLong)
+		client, db := newChatClientWithDatabase(t)
+		user := coderdtest.CreateFirstUser(t, client.Client)
+		modelConfig := createChatModel(t, client)
+
+		chat := dbgen.Chat(t, db, database.Chat{
+			OrganizationID:    user.OrganizationID,
+			OwnerID:           user.UserID,
+			LastModelConfigID: modelConfig.ID,
+			Title:             "update queued invalid id",
+		})
+
+		invalidRes, err := client.Request(
+			ctx,
+			http.MethodPatch,
+			fmt.Sprintf("/api/experimental/chats/%s/queue/not-an-int", chat.ID),
+			codersdk.UpdateChatQueuedMessageRequest{
+				Content: []codersdk.ChatInputPart{{
+					Type: codersdk.ChatInputPartTypeText,
+					Text: "edited",
+				}},
+			},
+		)
+		require.NoError(t, err)
+		defer invalidRes.Body.Close()
+
+		err = codersdk.ReadBodyAsError(invalidRes)
+		sdkErr := requireSDKError(t, err, http.StatusBadRequest)
+		require.Equal(t, "Invalid queued message ID.", sdkErr.Message)
+		require.Contains(t, sdkErr.Detail, "invalid syntax")
+	})
+
+	t.Run("ArchivedChat", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testutil.Context(t, testutil.WaitLong)
+		client, db := newChatClientWithDatabase(t)
+		user := coderdtest.CreateFirstUser(t, client.Client)
+		modelConfig := createChatModel(t, client)
+
+		chat := dbgen.Chat(t, db, database.Chat{
+			OrganizationID:    user.OrganizationID,
+			OwnerID:           user.UserID,
+			LastModelConfigID: modelConfig.ID,
+			Title:             "update queued archived",
+			Status:            database.ChatStatusError,
+		})
+
+		queuedContent, err := json.Marshal([]codersdk.ChatMessagePart{
+			codersdk.ChatMessageText("queued"),
+		})
+		require.NoError(t, err)
+		queuedMessage := insertTestChatQueuedMessage(ctx, t, db, chat.ID, queuedContent, modelConfig.ID)
+
+		_, err = db.ArchiveChatByID(dbauthz.AsSystemRestricted(ctx), chat.ID)
+		require.NoError(t, err)
+
+		_, err = client.UpdateChatQueuedMessage(ctx, chat.ID, queuedMessage.ID, codersdk.UpdateChatQueuedMessageRequest{
+			Content: []codersdk.ChatInputPart{{
+				Type: codersdk.ChatInputPartTypeText,
+				Text: "edited",
+			}},
+		})
+		sdkErr := requireSDKError(t, err, http.StatusBadRequest)
+		require.Contains(t, sdkErr.Message, "archived")
+	})
+
+	t.Run("MemberWithoutAgentsAccess", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testutil.Context(t, testutil.WaitLong)
+		client, db := newChatClientWithDatabase(t)
+		firstUser := coderdtest.CreateFirstUser(t, client.Client)
+		modelConfig := createChatModel(t, client)
+
+		memberClientRaw, member := coderdtest.CreateAnotherUser(t, client.Client, firstUser.OrganizationID)
+		memberClient := codersdk.NewExperimentalClient(memberClientRaw)
+		chat := dbgen.Chat(t, db, database.Chat{
+			OrganizationID:    firstUser.OrganizationID,
+			OwnerID:           member.ID,
+			LastModelConfigID: modelConfig.ID,
+			Title:             "update queued no agents access",
+			Status:            database.ChatStatusError,
+		})
+
+		queuedContent, err := json.Marshal([]codersdk.ChatMessagePart{
+			codersdk.ChatMessageText("queued"),
+		})
+		require.NoError(t, err)
+		queuedMessage := insertTestChatQueuedMessage(ctx, t, db, chat.ID, queuedContent, modelConfig.ID)
+
+		_, err = memberClient.UpdateChatQueuedMessage(ctx, chat.ID, queuedMessage.ID, codersdk.UpdateChatQueuedMessageRequest{
+			Content: []codersdk.ChatInputPart{{
+				Type: codersdk.ChatInputPartTypeText,
+				Text: "edited",
+			}},
+		})
+		requireSDKError(t, err, http.StatusNotFound)
+	})
+}
+
 func TestPromoteChatQueuedMessage(t *testing.T) {
 	t.Parallel()
 

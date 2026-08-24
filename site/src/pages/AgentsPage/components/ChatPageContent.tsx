@@ -249,6 +249,7 @@ interface ChatPageInputProps {
 	sendShortcut: AgentChatSendShortcut;
 	onDeleteQueuedMessage: (id: number) => Promise<void>;
 	onPromoteQueuedMessage: (id: number) => Promise<void>;
+	onEditQueuedMessage?: (id: number) => void;
 	onInterrupt: () => void;
 	isInputDisabled: boolean;
 	isSendPending: boolean;
@@ -281,7 +282,7 @@ interface ChatPageInputProps {
 		hasFileReferences: boolean,
 	) => void;
 	isEditing: boolean;
-	onCancelHistoryEdit: () => void;
+	onCancelEdit: () => void;
 	// File parts from the message being edited, converted to
 	// File objects and pre-populated into attachments.
 	editingFileBlocks?: readonly TypesGen.ChatMessagePart[];
@@ -317,6 +318,7 @@ export const ChatPageInput: FC<ChatPageInputProps> = ({
 	sendShortcut,
 	onDeleteQueuedMessage,
 	onPromoteQueuedMessage,
+	onEditQueuedMessage,
 	onInterrupt,
 	isInputDisabled,
 	isSendPending,
@@ -343,7 +345,7 @@ export const ChatPageInput: FC<ChatPageInputProps> = ({
 	remountKey,
 	onContentChange,
 	isEditing,
-	onCancelHistoryEdit,
+	onCancelEdit,
 	editingFileBlocks,
 	mcpServers,
 	selectedMCPServerIds,
@@ -567,8 +569,9 @@ export const ChatPageInput: FC<ChatPageInputProps> = ({
 			queuedMessages={queuedMessages}
 			onDeleteQueuedMessage={onDeleteQueuedMessage}
 			onPromoteQueuedMessage={onPromoteQueuedMessage}
-			isEditingHistoryMessage={isEditing}
-			onCancelHistoryEdit={onCancelHistoryEdit}
+			onEditQueuedMessage={onEditQueuedMessage}
+			isEditingMessage={isEditing}
+			onCancelEdit={onCancelEdit}
 			userPromptHistory={userPromptHistory}
 			isDisabled={isInputDisabled}
 			isLoading={isSendPending}

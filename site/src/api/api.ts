@@ -3486,6 +3486,23 @@ class ExperimentalApiMethods {
 		);
 	};
 
+	/**
+	 * Replaces the content of a queued message. The message keeps its
+	 * queue position and stays queued.
+	 */
+	updateChatQueuedMessage = async (
+		chatId: string,
+		queuedMessageId: number,
+		req: TypesGen.UpdateChatQueuedMessageRequest,
+	): Promise<TypesGen.UpdateChatQueuedMessageResponse> => {
+		const response =
+			await this.axios.patch<TypesGen.UpdateChatQueuedMessageResponse>(
+				`/api/experimental/chats/${chatId}/queue/${queuedMessageId}`,
+				req,
+			);
+		return response.data;
+	};
+
 	getChatDiffContents = async (
 		chatId: string,
 	): Promise<TypesGen.ChatDiffContents> => {

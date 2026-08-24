@@ -2376,6 +2376,135 @@ message in the chat.
 
 To perform this operation, you must be authenticated. [Learn more](authentication.md).
 
+## Update queued chat message
+
+### Code samples
+
+```sh
+# Example request using curl
+curl -X PATCH http://coder-server:8080/api/experimental/chats/{chat}/queue/{queuedMessage} \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
+  -H 'Coder-Session-Token: API_KEY'
+```
+
+`PATCH /api/experimental/chats/{chat}/queue/{queuedMessage}`
+
+Experimental: this endpoint is subject to change.
+
+> Body parameter
+
+```json
+{
+  "content": [
+    {
+      "content": "string",
+      "end_line": 0,
+      "file_id": "8a0cfb4f-ddc9-436d-91bb-75133c583767",
+      "file_name": "string",
+      "start_line": 0,
+      "text": "string",
+      "type": "text"
+    }
+  ]
+}
+```
+
+### Parameters
+
+| Name            | In   | Type                                                                                         | Required | Description                        |
+|-----------------|------|----------------------------------------------------------------------------------------------|----------|------------------------------------|
+| `chat`          | path | string(uuid)                                                                                 | true     | Chat ID                            |
+| `queuedMessage` | path | integer                                                                                      | true     | Queued message ID                  |
+| `body`          | body | [codersdk.UpdateChatQueuedMessageRequest](schemas.md#codersdkupdatechatqueuedmessagerequest) | true     | Update queued chat message request |
+
+### Example responses
+
+> 200 Response
+
+```json
+{
+  "queued_message": {
+    "chat_id": "efc9fe20-a1e5-4a8c-9c48-f1b30c1e4f86",
+    "content": [
+      {
+        "args": [
+          0
+        ],
+        "args_delta": "string",
+        "completed_at": "2019-08-24T14:15:22Z",
+        "content": "string",
+        "context_file_agent_id": {
+          "uuid": "string",
+          "valid": true
+        },
+        "context_file_content": "string",
+        "context_file_directory": "string",
+        "context_file_os": "string",
+        "context_file_path": "string",
+        "context_file_skill_meta_file": "string",
+        "context_file_truncated": true,
+        "created_at": "2019-08-24T14:15:22Z",
+        "data": [
+          0
+        ],
+        "end_line": 0,
+        "file_id": {
+          "uuid": "string",
+          "valid": true
+        },
+        "file_name": "string",
+        "hook_rewritten": true,
+        "is_error": true,
+        "is_media": true,
+        "mcp_server_config_id": {
+          "uuid": "string",
+          "valid": true
+        },
+        "media_type": "string",
+        "name": "string",
+        "parsed_commands": [
+          [
+            "string"
+          ]
+        ],
+        "provider_executed": true,
+        "provider_metadata": [
+          0
+        ],
+        "result": [
+          0
+        ],
+        "result_delta": "string",
+        "result_reset": true,
+        "skill_description": "string",
+        "skill_dir": "string",
+        "skill_name": "string",
+        "source_id": "string",
+        "start_line": 0,
+        "text": "string",
+        "title": "string",
+        "tool_call_id": "string",
+        "tool_name": "string",
+        "type": "text",
+        "url": "string"
+      }
+    ],
+    "created_at": "2019-08-24T14:15:22Z",
+    "id": 0,
+    "model_config_id": "f5fb4d91-62ca-4377-9ee6-5d43ba00d205"
+  }
+}
+```
+
+### Responses
+
+| Status | Meaning                                                 | Description | Schema                                                                                         |
+|--------|---------------------------------------------------------|-------------|------------------------------------------------------------------------------------------------|
+| 200    | [OK](https://tools.ietf.org/html/rfc7231#section-6.3.1) | OK          | [codersdk.UpdateChatQueuedMessageResponse](schemas.md#codersdkupdatechatqueuedmessageresponse) |
+
+To perform this operation, you must be authenticated. [Learn more](authentication.md).
+
 ## Reconcile invalid chat state
 
 ### Code samples

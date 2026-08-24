@@ -16,6 +16,7 @@ const (
 	TransitionEditMessage             Transition = "EditMessage"
 	TransitionRequestCompaction       Transition = "RequestCompaction"
 	TransitionDeleteQueuedMessage     Transition = "DeleteQueuedMessage"
+	TransitionUpdateQueuedMessage     Transition = "UpdateQueuedMessage"
 	TransitionPromoteQueuedMessage    Transition = "PromoteQueuedMessage"
 	TransitionInterrupt               Transition = "Interrupt"
 	TransitionCompleteRequiresAction  Transition = "CompleteRequiresAction"
@@ -47,6 +48,7 @@ var AllExecutionTransitions = []Transition{
 	TransitionEditMessage,
 	TransitionRequestCompaction,
 	TransitionDeleteQueuedMessage,
+	TransitionUpdateQueuedMessage,
 	TransitionPromoteQueuedMessage,
 	TransitionInterrupt,
 	TransitionCompleteRequiresAction,
@@ -94,6 +96,7 @@ var transitionMatrix = map[ExecutionState]map[Transition][]ExecutionState{
 		TransitionSendMessage:          {StateR1},
 		TransitionEditMessage:          {StateR0},
 		TransitionDeleteQueuedMessage:  {StateE0, StateE1},
+		TransitionUpdateQueuedMessage:  {StateE1},
 		TransitionPromoteQueuedMessage: {StateR0, StateR1},
 		TransitionRequestCompaction:    {StateR1},
 	},
@@ -112,6 +115,7 @@ var transitionMatrix = map[ExecutionState]map[Transition][]ExecutionState{
 		TransitionSendMessage:             {StateR1, StateI1},
 		TransitionEditMessage:             {StateR0},
 		TransitionDeleteQueuedMessage:     {StateR0, StateR1},
+		TransitionUpdateQueuedMessage:     {StateR1},
 		TransitionPromoteQueuedMessage:    {StateI1},
 		TransitionInterrupt:               {StateI1},
 		TransitionRecordGenerationAttempt: {StateR1},
@@ -130,6 +134,7 @@ var transitionMatrix = map[ExecutionState]map[Transition][]ExecutionState{
 		TransitionSendMessage:          {StateI1},
 		TransitionEditMessage:          {StateR0},
 		TransitionDeleteQueuedMessage:  {StateI0, StateI1},
+		TransitionUpdateQueuedMessage:  {StateI1},
 		TransitionPromoteQueuedMessage: {StateI1},
 		TransitionFinishInterruption:   {StateR0, StateR1},
 	},
@@ -144,6 +149,7 @@ var transitionMatrix = map[ExecutionState]map[Transition][]ExecutionState{
 		TransitionSendMessage:            {StateA1, StateR1},
 		TransitionEditMessage:            {StateR0},
 		TransitionDeleteQueuedMessage:    {StateA0, StateA1},
+		TransitionUpdateQueuedMessage:    {StateA1},
 		TransitionPromoteQueuedMessage:   {StateR0, StateR1},
 		TransitionInterrupt:              {StateR1},
 		TransitionCompleteRequiresAction: {StateR1},

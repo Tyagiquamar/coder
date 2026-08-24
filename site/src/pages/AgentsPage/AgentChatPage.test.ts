@@ -677,7 +677,7 @@ describe("useConversationEditingState", () => {
 		const remountKeyAfterEdit = result.current.remountKey;
 
 		act(() => {
-			result.current.handleCancelHistoryEdit();
+			result.current.handleCancelEdit();
 		});
 
 		expect(result.current.editingMessageId).toBeNull();
@@ -702,7 +702,7 @@ describe("useConversationEditingState", () => {
 		expect(mockInput.focus).not.toHaveBeenCalled();
 
 		act(() => {
-			result.current.handleCancelHistoryEdit();
+			result.current.handleCancelEdit();
 		});
 		expect(mockInput.focus).not.toHaveBeenCalled();
 		unmount();
@@ -717,7 +717,7 @@ describe("useConversationEditingState", () => {
 		});
 
 		act(() => {
-			result.current.handleCancelHistoryEdit();
+			result.current.handleCancelEdit();
 		});
 
 		// The hook reads the persisted draft from localStorage when
@@ -741,7 +741,7 @@ describe("useConversationEditingState", () => {
 		});
 
 		act(() => {
-			result.current.handleCancelHistoryEdit();
+			result.current.handleCancelEdit();
 		});
 
 		expect(result.current.editorInitialValue).toBe("live draft");
@@ -775,7 +775,7 @@ describe("useConversationEditingState", () => {
 		// the same text, so the editor is forced to reinitialize.
 		expect(result.current.remountKey).toBe(remountKeyAfterSend + 1);
 		expect(result.current.editorInitialValue).toBe("hello");
-		expect(onSend).toHaveBeenCalledWith("hello", undefined, 7);
+		expect(onSend).toHaveBeenCalledWith("hello", undefined, 7, undefined);
 		unmount();
 	});
 
@@ -793,7 +793,93 @@ describe("useConversationEditingState", () => {
 			await result.current.handleSendFromInput("hello", attachments);
 		});
 
-		expect(onSend).toHaveBeenCalledWith("hello", attachments, 7);
+		expect(onSend).toHaveBeenCalledWith("hello", attachments, 7, undefined);
+		unmount();
+	});
+
+	it("submits a queued-message edit through the queued send argument", async () => {
+		const { result, onSend, unmount } = renderEditing();
+
+		act(() => {
+			result.current.handleEditQueuedMessage(42, "queued text");
+		});
+
+		expect(result.current.editingQueuedMessageId).toBe(42);
+		expect(result.current.editingMessageId).toBeNull();
+		expect(result.current.editorInitialValue).toBe("queued text");
+
+		await act(async () => {
+			await result.current.handleSendFromInput("queued text");
+		});
+
+		expect(onSend).toHaveBeenCalledWith(
+			"queued text",
+			undefined,
+			undefined,
+			42,
+		);
+		expect(result.current.editingQueuedMessageId).toBeNull();
+		unmount();
+	});
+
+	it("keeps history and queued edit targets mutually exclusive", () => {
+		const { result, unmount } = renderEditing();
+
+		act(() => {
+			result.current.handleEditUserMessage(7, "history text");
+		});
+		act(() => {
+			result.current.handleEditQueuedMessage(42, "queued text");
+		});
+
+		expect(result.current.editingMessageId).toBeNull();
+		expect(result.current.editingQueuedMessageId).toBe(42);
+
+		act(() => {
+			result.current.handleEditUserMessage(7, "history text");
+		});
+
+		expect(result.current.editingMessageId).toBe(7);
+		expect(result.current.editingQueuedMessageId).toBeNull();
+		unmount();
+	});
+
+	it("restores the queued edit target when the queued update fails", async () => {
+		const { result, onSend, unmount } = renderEditing();
+		const mockInput = createMockChatInputHandle("queued text");
+		result.current.chatInputRef.current = mockInput.handle;
+		onSend.mockRejectedValueOnce(new Error("boom"));
+
+		act(() => {
+			result.current.handleEditQueuedMessage(42, "queued text");
+		});
+
+		await act(async () => {
+			await expect(
+				result.current.handleSendFromInput("queued text"),
+			).rejects.toThrow("boom");
+		});
+
+		expect(result.current.editingQueuedMessageId).toBe(42);
+		expect(result.current.editorInitialValue).toBe("queued text");
+		unmount();
+	});
+
+	it("restores the pre-edit draft when a queued edit is canceled", () => {
+		const { result, unmount } = renderEditing();
+
+		act(() => {
+			result.current.handleContentChange("live draft", "{}", false);
+		});
+		act(() => {
+			result.current.handleEditQueuedMessage(42, "queued text");
+		});
+		act(() => {
+			result.current.handleCancelEdit();
+		});
+
+		expect(result.current.editingQueuedMessageId).toBeNull();
+		expect(result.current.editorInitialValue).toBe("live draft");
 		unmount();
 	});
 
@@ -870,7 +956,12 @@ describe("useConversationEditingState", () => {
 			await result.current.handleSendFromInput("hello");
 		});
 
-		expect(onSend).toHaveBeenCalledWith("hello", undefined, undefined);
+		expect(onSend).toHaveBeenCalledWith(
+			"hello",
+			undefined,
+			undefined,
+			undefined,
+		);
 		expect(mockInput.clear).toHaveBeenCalled();
 		expect(mockInput.focus).toHaveBeenCalled();
 		expect(localStorage.getItem(expectedKey)).toBeNull();
@@ -913,7 +1004,12 @@ describe("useConversationEditingState", () => {
 		await act(async () => {
 			result.current.handleSendFromInput("hello");
 			await vi.waitFor(() => {
-				expect(onSend).toHaveBeenCalledWith("hello", undefined, undefined);
+				expect(onSend).toHaveBeenCalledWith(
+					"hello",
+					undefined,
+					undefined,
+					undefined,
+				);
 			});
 		});
 
@@ -1110,7 +1206,7 @@ describe("useConversationEditingState", () => {
 
 		// Cancel — should restore both plain text and serialized state.
 		act(() => {
-			result.current.handleCancelHistoryEdit();
+			result.current.handleCancelEdit();
 		});
 
 		expect(result.current.editingMessageId).toBeNull();
@@ -1139,7 +1235,7 @@ describe("useConversationEditingState", () => {
 		});
 
 		act(() => {
-			result.current.handleCancelHistoryEdit();
+			result.current.handleCancelEdit();
 		});
 
 		expect(result.current.initialEditorState).toBeUndefined();

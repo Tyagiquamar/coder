@@ -637,6 +637,17 @@ type CreateChatMessageRequest struct {
 	ReasoningEffort *string       `json:"reasoning_effort,omitempty"`
 }
 
+// UpdateChatQueuedMessageRequest is the request to replace the content
+// of a queued message. The message keeps its queue position.
+type UpdateChatQueuedMessageRequest struct {
+	Content []ChatInputPart `json:"content"`
+}
+
+// UpdateChatQueuedMessageResponse contains the updated queued message.
+type UpdateChatQueuedMessageResponse struct {
+	QueuedMessage ChatQueuedMessage `json:"queued_message"`
+}
+
 // EditChatMessageRequest is the request to edit a user message in a chat.
 type EditChatMessageRequest struct {
 	Content []ChatInputPart `json:"content"`
@@ -3128,6 +3139,31 @@ func (c *ExperimentalClient) EditChatMessage(
 	}
 	defer res.Body.Close()
 	var resp EditChatMessageResponse
+	return resp, ReadBodyAsJSON(res, &resp)
+}
+
+// UpdateChatQueuedMessage replaces the content of a queued message
+// without changing its position in the queue.
+func (c *ExperimentalClient) UpdateChatQueuedMessage(
+	ctx context.Context,
+	chatID uuid.UUID,
+	queuedMessageID int64,
+	req UpdateChatQueuedMessageRequest,
+) (UpdateChatQueuedMessageResponse, error) {
+	res, err := c.Request(
+		ctx,
+		http.MethodPatch,
+		fmt.Sprintf("/api/experimental/chats/%s/queue/%d", chatID, queuedMessageID),
+		req,
+	)
+	if err != nil {
+		return UpdateChatQueuedMessageResponse{}, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return UpdateChatQueuedMessageResponse{}, ReadBodyAsError(res)
+	}
+	var resp UpdateChatQueuedMessageResponse
 	return resp, ReadBodyAsJSON(res, &resp)
 }
 

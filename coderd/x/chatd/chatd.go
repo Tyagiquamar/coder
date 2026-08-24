@@ -1192,6 +1192,18 @@ type EditMessageResult struct {
 	Chat              database.Chat
 }
 
+// UpdateQueuedOptions controls queued-message content replacement.
+type UpdateQueuedOptions struct {
+	ChatID          uuid.UUID
+	QueuedMessageID int64
+	Content         []codersdk.ChatMessagePart
+}
+
+// UpdateQueuedResult contains the updated queued message.
+type UpdateQueuedResult struct {
+	QueuedMessage database.ChatQueuedMessage
+}
+
 // PromoteQueuedOptions controls queued-message promotion.
 type PromoteQueuedOptions struct {
 	ChatID          uuid.UUID
@@ -2114,6 +2126,79 @@ func (p *Server) DeleteQueued(
 		return err
 	})
 	return err
+}
+
+// UpdateQueued replaces the content of a queued user message in
+// place. The message keeps its queue position and stays queued.
+// Lifecycle hooks see the replacement content just like a new send,
+// so an edit cannot smuggle content past a user_prompt_submit hook.
+func (p *Server) UpdateQueued(
+	ctx context.Context,
+	opts UpdateQueuedOptions,
+) (UpdateQueuedResult, error) {
+	if opts.ChatID == uuid.Nil {
+		return UpdateQueuedResult{}, xerrors.New("chat_id is required")
+	}
+	if len(opts.Content) == 0 {
+		return UpdateQueuedResult{}, xerrors.New("content is required")
+	}
+
+	contentParts := opts.Content
+	if p.hooks.Enabled() {
+		turnID := uuid.New()
+		chat, err := p.db.GetChatByID(ctx, opts.ChatID)
+		if err != nil {
+			return UpdateQueuedResult{}, xerrors.Errorf("load chat for user_prompt_submit: %w", err)
+		}
+		if chat.Archived {
+			return UpdateQueuedResult{}, ErrChatArchived
+		}
+		promptMessage, err := chathooks.UserPromptMessage(contentParts)
+		if err != nil {
+			return UpdateQueuedResult{}, err
+		}
+		promptResult, err := p.hooks.Trigger(ctx, chathooks.ChatFor(chat, &turnID), promptMessage, agenthooks.EventUserPromptSubmit, dispatch.CapacityClassAdmission)
+		if err != nil {
+			return UpdateQueuedResult{}, p.handleUserPromptDispatchError(ctx, opts.ChatID, chathooks.UserPromptDenial(err))
+		}
+		contentParts, _, err = chathooks.ComposeUserPromptContent(contentParts, promptResult)
+		if err != nil {
+			return UpdateQueuedResult{}, err
+		}
+	}
+
+	content, err := chatprompt.MarshalParts(contentParts)
+	if err != nil {
+		return UpdateQueuedResult{}, xerrors.Errorf("marshal message content: %w", err)
+	}
+
+	var result UpdateQueuedResult
+	machine := p.newChatMachine(opts.ChatID)
+	updateErr := machine.Update(ctx, func(tx *chatstate.Tx, store database.Store) error {
+		lockedChat, err := store.GetChatByID(ctx, opts.ChatID)
+		if err != nil {
+			return xerrors.Errorf("load chat: %w", err)
+		}
+		if lockedChat.Archived {
+			return ErrChatArchived
+		}
+
+		updateResult, err := tx.UpdateQueuedMessage(chatstate.UpdateQueuedMessageInput{
+			QueuedMessageID: opts.QueuedMessageID,
+			Content:         content,
+		})
+		if err != nil {
+			return err
+		}
+		result.QueuedMessage = updateResult.UpdatedQueuedMessage
+
+		// File-link errors must roll back the content replacement.
+		return chatstate.LinkFiles(ctx, store, opts.ChatID, chatprompt.FileIDs(contentParts))
+	})
+	if updateErr != nil {
+		return UpdateQueuedResult{}, updateErr
+	}
+	return result, nil
 }
 
 // PromoteQueued promotes a queued message through the chatstate state

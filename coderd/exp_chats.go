@@ -2945,6 +2945,120 @@ func (api *API) deleteChatQueuedMessage(rw http.ResponseWriter, r *http.Request)
 }
 
 // EXPERIMENTAL: this endpoint is experimental and is subject to change.
+//
+// @Summary Update queued chat message
+// @ID update-queued-chat-message
+// @Security CoderSessionToken
+// @Tags Chats
+// @Accept json
+// @Produce json
+// @Param chat path string true "Chat ID" format(uuid)
+// @Param queuedMessage path int true "Queued message ID"
+// @Param request body codersdk.UpdateChatQueuedMessageRequest true "Update queued chat message request"
+// @Success 200 {object} codersdk.UpdateChatQueuedMessageResponse
+// @Router /api/experimental/chats/{chat}/queue/{queuedMessage} [patch]
+// @Description Experimental: this endpoint is subject to change.
+func (api *API) patchChatQueuedMessage(rw http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	apiKey := httpmw.APIKey(r)
+	chat := httpmw.ChatParam(r)
+
+	if !api.requireChatDaemon(ctx, rw) {
+		return
+	}
+
+	if !api.Authorize(r, policy.ActionUpdate, chat.RBACObject()) {
+		httpapi.ResourceNotFound(rw)
+		return
+	}
+
+	// The edited content is processed with the owner's credentials
+	// once the message is promoted, so only the owner may rewrite it.
+	// See postChatMessages for the security rationale.
+	if apiKey.UserID != chat.OwnerID {
+		httpapi.Write(ctx, rw, http.StatusForbidden, codersdk.Response{
+			Message: "Only the chat owner may edit queued messages.",
+		})
+		return
+	}
+
+	if chat.Archived {
+		httpapi.Write(ctx, rw, http.StatusBadRequest, codersdk.Response{
+			Message: "Cannot edit queued messages in an archived chat.",
+		})
+		return
+	}
+
+	queuedMessageIDStr := chi.URLParam(r, "queuedMessage")
+	queuedMessageID, err := strconv.ParseInt(queuedMessageIDStr, 10, 64)
+	if err != nil {
+		httpapi.Write(ctx, rw, http.StatusBadRequest, codersdk.Response{
+			Message: "Invalid queued message ID.",
+			Detail:  err.Error(),
+		})
+		return
+	}
+
+	var req codersdk.UpdateChatQueuedMessageRequest
+	if !httpapi.Read(ctx, rw, r, &req) {
+		return
+	}
+
+	contentBlocks, _, inputError := createChatInputFromParts(ctx, api.Database, req.Content, "content")
+	if inputError != nil {
+		httpapi.Write(ctx, rw, http.StatusBadRequest, codersdk.Response{
+			Message: inputError.Message,
+			Detail:  inputError.Detail,
+		})
+		return
+	}
+
+	updateResult, updateErr := api.chatDaemon.UpdateQueued(ctx, chatd.UpdateQueuedOptions{
+		ChatID:          chat.ID,
+		QueuedMessageID: queuedMessageID,
+		Content:         contentBlocks,
+	})
+	if updateErr != nil {
+		if writeChatHookErr(ctx, rw, updateErr, "Chat message denied by lifecycle hook.") {
+			return
+		}
+		if writeChatFileError(ctx, rw, updateErr) {
+			return
+		}
+
+		switch {
+		case xerrors.Is(updateErr, chatd.ErrChatArchived):
+			httpapi.Write(ctx, rw, http.StatusBadRequest, codersdk.Response{
+				Message: "Cannot edit queued messages in an archived chat.",
+			})
+		case xerrors.Is(updateErr, chatstate.ErrQueuedMessageNotFound), xerrors.Is(updateErr, sql.ErrNoRows):
+			httpapi.Write(ctx, rw, http.StatusNotFound, codersdk.Response{
+				Message: "Queued message not found.",
+			})
+		case errors.Is(updateErr, chatstate.ErrChatNotFound):
+			httpapi.ResourceNotFound(rw)
+		case writeChatInvalidState(ctx, rw, updateErr):
+			// response already written
+		case errors.Is(updateErr, chatstate.ErrTransitionNotAllowed):
+			httpapi.Write(ctx, rw, http.StatusConflict, codersdk.Response{
+				Message: "Chat has no queued messages to edit.",
+				Detail:  updateErr.Error(),
+			})
+		default:
+			httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
+				Message: "Failed to edit queued message.",
+				Detail:  updateErr.Error(),
+			})
+		}
+		return
+	}
+
+	httpapi.Write(ctx, rw, http.StatusOK, codersdk.UpdateChatQueuedMessageResponse{
+		QueuedMessage: convertChatQueuedMessage(updateResult.QueuedMessage),
+	})
+}
+
+// EXPERIMENTAL: this endpoint is experimental and is subject to change.
 func (api *API) promoteChatQueuedMessage(rw http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	apiKey := httpmw.APIKey(r)

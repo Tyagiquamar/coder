@@ -140,7 +140,7 @@ export const NoPromptHistoryUpArrowIsNoOp: Story = {
 
 export const PromptHistorySuppressedWhileEditingHistoryMessage: Story = {
 	args: {
-		isEditingHistoryMessage: true,
+		isEditingMessage: true,
 		userPromptHistory: promptHistory,
 	},
 	play: async ({ canvasElement }) => {
@@ -396,6 +396,27 @@ export const Streaming: Story = {
 		initialValue: "",
 		onAttach: fn(),
 		onRemoveAttachment: fn(),
+	},
+};
+
+// While editing (for example a queued message), the primary button
+// saves the edit instead of stopping the active turn.
+export const StreamingWhileEditing: Story = {
+	args: {
+		isStreaming: true,
+		isEditingMessage: true,
+		onCancelEdit: fn(),
+		onInterrupt: fn(),
+		initialValue: "Edited queued message",
+		onAttach: fn(),
+		onRemoveAttachment: fn(),
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		expect(canvas.getByRole("button", { name: "Save Edit" })).toBeVisible();
+		expect(
+			canvas.queryByRole("button", { name: "Stop" }),
+		).not.toBeInTheDocument();
 	},
 };
 

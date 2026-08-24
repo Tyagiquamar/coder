@@ -12796,6 +12796,38 @@ func (q *sqlQuerier) UpdateChatPlanModeByID(ctx context.Context, arg UpdateChatP
 	return i, err
 }
 
+const updateChatQueuedMessageContent = `-- name: UpdateChatQueuedMessageContent :one
+UPDATE chat_queued_messages
+SET content = $1::jsonb
+WHERE id = $2::bigint AND chat_id = $3::uuid
+RETURNING id, chat_id, content, created_at, model_config_id, position, created_by, reasoning_effort
+`
+
+type UpdateChatQueuedMessageContentParams struct {
+	Content json.RawMessage `db:"content" json:"content"`
+	ID      int64           `db:"id" json:"id"`
+	ChatID  uuid.UUID       `db:"chat_id" json:"chat_id"`
+}
+
+// Replaces a queued message's content in place, scoped to the parent
+// chat. The row keeps its position, so the message stays at the same
+// place in the queue.
+func (q *sqlQuerier) UpdateChatQueuedMessageContent(ctx context.Context, arg UpdateChatQueuedMessageContentParams) (ChatQueuedMessage, error) {
+	row := q.db.QueryRowContext(ctx, updateChatQueuedMessageContent, arg.Content, arg.ID, arg.ChatID)
+	var i ChatQueuedMessage
+	err := row.Scan(
+		&i.ID,
+		&i.ChatID,
+		&i.Content,
+		&i.CreatedAt,
+		&i.ModelConfigID,
+		&i.Position,
+		&i.CreatedBy,
+		&i.ReasoningEffort,
+	)
+	return i, err
+}
+
 const updateChatRetryState = `-- name: UpdateChatRetryState :one
 WITH updated_chat AS (
     UPDATE chats

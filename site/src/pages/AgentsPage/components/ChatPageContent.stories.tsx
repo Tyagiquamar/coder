@@ -70,7 +70,7 @@ const StoryChatPageInput: FC<{
 			modelSelectorPlaceholder="Select model"
 			canConfigureAgentSetup={false}
 			isEditing={false}
-			onCancelHistoryEdit={fn()}
+			onCancelEdit={fn()}
 			workspaceOptions={[]}
 			selectedWorkspaceId={null}
 			isWorkspaceLoading={false}

@@ -797,6 +797,43 @@ func (tx *Tx) DeleteQueuedMessage(input DeleteQueuedMessageInput) (DeleteQueuedM
 	}, nil
 }
 
+// UpdateQueuedMessageInput configures [Tx.UpdateQueuedMessage].
+type UpdateQueuedMessageInput struct {
+	QueuedMessageID int64
+	Content         pqtype.NullRawMessage
+}
+
+// UpdateQueuedMessageResult is returned by [Tx.UpdateQueuedMessage].
+type UpdateQueuedMessageResult struct {
+	UpdatedQueuedMessage database.ChatQueuedMessage
+}
+
+// UpdateQueuedMessage replaces the content of a single queued user
+// message. The row keeps its position, so the message stays queued at
+// the same place and no history is touched.
+func (tx *Tx) UpdateQueuedMessage(input UpdateQueuedMessageInput) (UpdateQueuedMessageResult, error) {
+	_, _, err := tx.requireFromAllowed(TransitionUpdateQueuedMessage)
+	if err != nil {
+		return UpdateQueuedMessageResult{}, err
+	}
+	rawContent := input.Content.RawMessage
+	if !input.Content.Valid || len(rawContent) == 0 {
+		return UpdateQueuedMessageResult{}, xerrors.New("content is required")
+	}
+	updated, err := tx.store.UpdateChatQueuedMessageContent(tx.ctx, database.UpdateChatQueuedMessageContentParams{
+		ID:      input.QueuedMessageID,
+		ChatID:  tx.chatID,
+		Content: rawContent,
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return UpdateQueuedMessageResult{}, ErrQueuedMessageNotFound
+	}
+	if err != nil {
+		return UpdateQueuedMessageResult{}, xerrors.Errorf("update queued: %w", err)
+	}
+	return UpdateQueuedMessageResult{UpdatedQueuedMessage: updated}, nil
+}
+
 // PromoteQueuedMessageInput configures [Tx.PromoteQueuedMessage].
 type PromoteQueuedMessageInput struct {
 	QueuedMessageID int64

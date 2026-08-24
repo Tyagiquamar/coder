@@ -119,6 +119,40 @@ export const MultiLineTextTruncation: Story = {
 	},
 };
 
+// Clicking the collapsed text expands it to the full message, and
+// clicking again collapses it back.
+export const ExpandAndCollapseText: Story = {
+	args: {
+		messages: [
+			buildMessage(
+				1,
+				textContent(
+					"First line of the message\nSecond line that should be hidden",
+				),
+			),
+		],
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		const toggle = canvas.getByRole("button", {
+			name: /First line of the message/,
+		});
+		expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+		await userEvent.click(toggle);
+		await waitFor(() =>
+			expect(
+				canvas.getByRole("button", { name: /Second line/ }),
+			).toHaveAttribute("aria-expanded", "true"),
+		);
+
+		await userEvent.click(canvas.getByRole("button", { name: /Second line/ }));
+		await waitFor(() =>
+			expect(canvas.queryByText(/Second line/)).not.toBeInTheDocument(),
+		);
+	},
+};
+
 // A message with both text and a file attachment shows the ImageIcon badge.
 export const WithAttachments: Story = {
 	args: {
@@ -143,7 +177,7 @@ export const AttachmentsOnly: Story = {
 	},
 };
 
-// Queued messages retain send and delete actions without exposing edit.
+// Without an edit handler the row exposes only send and remove.
 export const ActionsExcludeEdit: Story = {
 	args: {
 		messages: [buildMessage(1, textContent("Run the linter"))],
@@ -155,8 +189,28 @@ export const ActionsExcludeEdit: Story = {
 			canvas.getByRole("button", { name: "Remove from queue" }),
 		).toBeVisible();
 		expect(
-			canvas.queryByRole("button", { name: "Edit" }),
+			canvas.queryByRole("button", { name: "Edit queued message" }),
 		).not.toBeInTheDocument();
+	},
+};
+
+// With an edit handler the row exposes an edit action that reports the
+// queued message ID.
+export const EditAction: Story = {
+	args: {
+		messages: [
+			buildMessage(1, textContent("Run the linter")),
+			buildMessage(2, textContent("Run the formatter")),
+		],
+		onEdit: fn(),
+	},
+	play: async ({ args, canvasElement }) => {
+		const canvas = within(canvasElement);
+		const editButtons = canvas.getAllByRole("button", {
+			name: "Edit queued message",
+		});
+		await userEvent.click(editButtons[1]);
+		expect(args.onEdit).toHaveBeenCalledWith(2);
 	},
 };
 
@@ -230,6 +284,9 @@ export const HookNotice: Story = {
 		const trigger = canvas.getByRole("button", {
 			name: "Lifecycle hook notice: Deployment prompts are audited.",
 		});
+		// The first tab stop is the expand/collapse control on the
+		// message text.
+		await userEvent.tab();
 		await userEvent.tab();
 		expect(trigger).toHaveFocus();
 		const tooltip = await within(document.body).findByRole("tooltip");

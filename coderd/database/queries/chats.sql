@@ -2683,6 +2683,15 @@ LIMIT 1;
 SELECT * FROM chat_queued_messages
 WHERE id = @id::bigint AND chat_id = @chat_id::uuid;
 
+-- name: UpdateChatQueuedMessageContent :one
+-- Replaces a queued message's content in place, scoped to the parent
+-- chat. The row keeps its position, so the message stays at the same
+-- place in the queue.
+UPDATE chat_queued_messages
+SET content = @content::jsonb
+WHERE id = @id::bigint AND chat_id = @chat_id::uuid
+RETURNING *;
+
 -- name: DeleteChatQueuedMessageReturningCount :execrows
 -- Deletes a queued message, scoped to the parent chat. Returns the
 -- number of affected rows so callers can detect missing rows without

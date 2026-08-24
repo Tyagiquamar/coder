@@ -15,7 +15,7 @@ import { API } from "#/api/api";
 import type * as TypesGen from "#/api/typesGenerated";
 import type { ChatDiffStatus, ChatMessagePart } from "#/api/typesGenerated";
 import { AGENT_BROWSER_APP_SLUG } from "#/modules/apps/apps";
-import { MockChat } from "#/testHelpers/chatEntities";
+import { MockChat, MockChatQueuedMessage } from "#/testHelpers/chatEntities";
 import {
 	MockDefaultOrganization,
 	MockGroup,
@@ -84,9 +84,11 @@ const buildEditing = (
 	initialEditorState: undefined,
 	remountKey: 0,
 	editingMessageId: null as number | null,
+	editingQueuedMessageId: null as number | null,
 	editingFileBlocks: [] as readonly ChatMessagePart[],
 	handleEditUserMessage: fn(),
-	handleCancelHistoryEdit: fn(),
+	handleEditQueuedMessage: fn(),
+	handleCancelEdit: fn(),
 	handleSendFromInput: fn(),
 	handleContentChange: fn(),
 	...overrides,
@@ -165,6 +167,7 @@ const StoryAgentChatPageView: FC<StoryProps> = ({ editing, ...overrides }) => {
 		handleInterrupt: fn(),
 		handleDeleteQueuedMessage: fn(),
 		handlePromoteQueuedMessage: fn(),
+		handleEditQueuedMessage: fn(),
 		handleArchiveAgentAction: fn(),
 		handleUnarchiveAgentAction: fn(),
 		handleArchiveAndDeleteWorkspaceAction: fn(),
@@ -1103,6 +1106,43 @@ export const EditingMessage: Story = {
 			}}
 		/>
 	),
+};
+
+/** Editing a queued message: the queue row stays visible and queued while
+ *  the composer holds the queued text in the shared editing state. */
+export const EditingQueuedMessage: Story = {
+	render: () => {
+		const store = buildStoreWithMessages(editingMessages, "running");
+		store.setQueuedMessages([
+			{
+				...MockChatQueuedMessage,
+				id: 42,
+				content: [{ type: "text", text: "Then run the tests" }],
+			},
+		]);
+		return (
+			<StoryAgentChatPageView
+				store={store}
+				editing={{
+					editingQueuedMessageId: 42,
+					editorInitialValue: "Then run the tests",
+				}}
+			/>
+		);
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		expect(
+			await canvas.findByRole("button", { name: "Then run the tests" }),
+		).toBeVisible();
+		expect(
+			canvas.getByRole("button", { name: "Edit queued message" }),
+		).toBeInTheDocument();
+		expect(canvas.getByRole("button", { name: "Save Edit" })).toBeVisible();
+		expect(
+			canvas.getByRole("button", { name: "Cancel editing" }),
+		).toBeVisible();
+	},
 };
 
 // ---------------------------------------------------------------------------

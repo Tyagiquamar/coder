@@ -1046,6 +1046,61 @@ const docTemplate = `{
                 ]
             }
         },
+        "/api/experimental/chats/{chat}/queue/{queuedMessage}": {
+            "patch": {
+                "description": "Experimental: this endpoint is subject to change.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chats"
+                ],
+                "summary": "Update queued chat message",
+                "operationId": "update-queued-chat-message",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Chat ID",
+                        "name": "chat",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Queued message ID",
+                        "name": "queuedMessage",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Update queued chat message request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/codersdk.UpdateChatQueuedMessageRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/codersdk.UpdateChatQueuedMessageResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CoderSessionToken": []
+                    }
+                ]
+            }
+        },
         "/api/experimental/chats/{chat}/reconcile-invalid": {
             "post": {
                 "description": "Experimental: this endpoint is subject to change.",
@@ -27830,6 +27885,25 @@ const docTemplate = `{
                 },
                 "model_config": {
                     "$ref": "#/definitions/codersdk.ChatModelCallConfig"
+                }
+            }
+        },
+        "codersdk.UpdateChatQueuedMessageRequest": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/codersdk.ChatInputPart"
+                    }
+                }
+            }
+        },
+        "codersdk.UpdateChatQueuedMessageResponse": {
+            "type": "object",
+            "properties": {
+                "queued_message": {
+                    "$ref": "#/definitions/codersdk.ChatQueuedMessage"
                 }
             }
         },

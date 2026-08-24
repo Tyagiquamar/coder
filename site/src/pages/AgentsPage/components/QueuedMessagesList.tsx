@@ -3,6 +3,7 @@ import {
 	CornerDownLeftIcon,
 	ImageIcon,
 	InfoIcon,
+	SquarePenIcon,
 	Trash2Icon,
 } from "lucide-react";
 import { type FC, useEffect, useState } from "react";
@@ -20,6 +21,7 @@ interface QueuedMessagesListProps {
 	messages: readonly ChatQueuedMessage[];
 	onDelete: (id: number) => Promise<void> | void;
 	onPromote: (id: number) => Promise<void> | void;
+	onEdit?: (id: number) => void;
 	className?: string;
 }
 
@@ -57,6 +59,7 @@ export const QueuedMessagesList: FC<QueuedMessagesListProps> = ({
 	messages,
 	onDelete,
 	onPromote,
+	onEdit,
 	className,
 }) => {
 	const items = messages.map((message) => {
@@ -66,6 +69,19 @@ export const QueuedMessagesList: FC<QueuedMessagesListProps> = ({
 	});
 
 	const [hoveredID, setHoveredID] = useState<number | null>(null);
+	const [expandedIDs, setExpandedIDs] = useState<ReadonlySet<number>>(
+		new Set(),
+	);
+
+	const toggleExpanded = (id: number) => {
+		setExpandedIDs((current) => {
+			const next = new Set(current);
+			if (!next.delete(id)) {
+				next.add(id);
+			}
+			return next;
+		});
+	};
 	// Tracks which item has an async action in flight and what kind.
 	const [busyItem, setBusyItem] = useState<{
 		id: number;
@@ -162,6 +178,8 @@ export const QueuedMessagesList: FC<QueuedMessagesListProps> = ({
 				const isItemBusy = busyItem !== null && busyItem.id === item.id;
 				const isHovered = hoveredID === item.id;
 				const showActions = isHovered || (isFirst && hoveredID === null);
+				const isExpanded = expandedIDs.has(item.id);
+				const hasMoreLines = item.displayText.includes("\n");
 
 				return (
 					<div
@@ -173,10 +191,24 @@ export const QueuedMessagesList: FC<QueuedMessagesListProps> = ({
 						}
 					>
 						<div className="flex items-center gap-2 rounded-lg border border-solid border-border-default bg-surface-secondary px-3 py-2 font-sans text-sm leading-relaxed text-content-primary shadow-sm">
-							<span className="min-w-0 flex-1 truncate">
-								{item.displayText.split("\n")[0]}
-								{item.displayText.includes("\n") ? "…" : ""}
-							</span>
+							<button
+								type="button"
+								aria-expanded={isExpanded}
+								onClick={() => toggleExpanded(item.id)}
+								className={cn(
+									"min-w-0 flex-1 cursor-pointer border-none bg-transparent p-0 text-left font-sans text-sm leading-relaxed text-content-primary",
+									isExpanded ? "whitespace-pre-wrap break-words" : "truncate",
+								)}
+							>
+								{isExpanded ? (
+									item.displayText
+								) : (
+									<>
+										{item.displayText.split("\n")[0]}
+										{hasMoreLines ? "…" : ""}
+									</>
+								)}
+							</button>
 							{item.attachmentCount > 0 && (
 								<span
 									role="img"
@@ -239,6 +271,23 @@ export const QueuedMessagesList: FC<QueuedMessagesListProps> = ({
 									</TooltipTrigger>
 									<TooltipContent side="top">Send now</TooltipContent>
 								</Tooltip>
+								{onEdit && (
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												variant="subtle"
+												size="icon"
+												aria-label="Edit queued message"
+												disabled={isBusy}
+												onClick={() => onEdit(item.id)}
+												className="size-6 rounded text-content-secondary hover:bg-surface-tertiary hover:text-content-primary"
+											>
+												<SquarePenIcon className="size-3.5" />
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent side="top">Edit</TooltipContent>
+									</Tooltip>
+								)}
 								<Tooltip>
 									<TooltipTrigger asChild>
 										<Button
