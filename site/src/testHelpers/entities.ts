@@ -3319,6 +3319,19 @@ export const MockEveryoneGroup: TypesGen.Group = {
 	total_member_count: 0,
 };
 
+export const MockChatModelACL: TypesGen.ChatModelACL = {
+	users: [{ ...MockUserMember, role: "read" }],
+	groups: [
+		{ ...MockGroup, role: "read" },
+		{ ...MockEveryoneGroup, role: "read" },
+	],
+};
+
+export const MockChatModelACLAvailable: TypesGen.ACLAvailable = {
+	users: [MockUserOwner, MockUserMember],
+	groups: [MockGroup, MockGroup2, MockEveryoneGroup],
+};
+
 export const MockTemplateACL: TypesGen.TemplateACL = {
 	group: [
 		{ ...MockEveryoneGroup, role: "use" },

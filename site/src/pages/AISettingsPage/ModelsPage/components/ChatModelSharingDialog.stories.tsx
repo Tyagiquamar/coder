@@ -2,51 +2,59 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, fn, spyOn, userEvent, waitFor, within } from "storybook/test";
 import { API } from "#/api/api";
+import type * as TypesGen from "#/api/typesGenerated";
 import {
+	MockChatModelACLAvailable,
 	MockDefaultOrganization,
+	MockEveryoneGroup,
 	MockGroup,
 	MockGroup2,
-	MockOrganizationMember,
-	MockOrganizationMember2,
+	MockUserMember,
+	MockUserOwner,
 } from "#/testHelpers/entities";
 import { withDashboardProvider, withToaster } from "#/testHelpers/storybook";
 import { mockGPT5 } from "../testFixtures";
 import { ChatModelSharingDialog } from "./ChatModelSharingDialog";
 
-type MockACL = {
-	user_roles: Record<string, "read">;
-	group_roles: Record<string, "read">;
-};
+type MockACL = TypesGen.ChatModelACL;
 
-const emptyACL: MockACL = { user_roles: {}, group_roles: {} };
+const emptyACL: MockACL = { users: [], groups: [] };
 const populatedACL: MockACL = {
-	user_roles: { [MockOrganizationMember2.user_id]: "read" as const },
-	group_roles: { [MockGroup.id]: "read" as const },
+	users: [{ ...MockUserMember, role: "read" }],
+	groups: [{ ...MockGroup, role: "read" }],
+};
+const everyoneACL: MockACL = {
+	users: [],
+	groups: [{ ...MockEveryoneGroup, role: "read" }],
+};
+const refreshedACL: MockACL = {
+	users: [{ ...MockUserOwner, role: "read" }],
+	groups: [{ ...MockGroup2, role: "read" }],
 };
 
-const mockPrincipalRequests = () => {
-	spyOn(API, "getOrganizationPaginatedMembers").mockResolvedValue({
-		members: [MockOrganizationMember, MockOrganizationMember2],
-		count: 2,
-	});
-	spyOn(API, "getGroupsByOrganization").mockResolvedValue([
-		MockGroup,
-		MockGroup2,
-	]);
+const mockLegacyPrincipalRequests = () => {
+	spyOn(API, "getOrganizationPaginatedMembers").mockRejectedValue(
+		new Error("Legacy organization member discovery must not be called"),
+	);
+	spyOn(API, "getGroupsByOrganization").mockRejectedValue(
+		new Error("Legacy organization group discovery must not be called"),
+	);
 };
 
 const mockRequests = ({
 	acl = emptyACL,
 	aclError,
 	aclPending = false,
+	availableError,
 	updateError,
 }: {
 	acl?: MockACL;
 	aclError?: Error;
 	aclPending?: boolean;
+	availableError?: Error;
 	updateError?: Error;
 } = {}) => {
-	mockPrincipalRequests();
+	mockLegacyPrincipalRequests();
 	if (aclPending) {
 		spyOn(API.experimental, "getChatModelACL").mockReturnValue(
 			new Promise(() => undefined),
@@ -55,6 +63,15 @@ const mockRequests = ({
 		spyOn(API.experimental, "getChatModelACL").mockRejectedValue(aclError);
 	} else {
 		spyOn(API.experimental, "getChatModelACL").mockResolvedValue(acl);
+	}
+	if (availableError) {
+		spyOn(API.experimental, "getChatModelACLAvailable").mockRejectedValue(
+			availableError,
+		);
+	} else {
+		spyOn(API.experimental, "getChatModelACLAvailable").mockResolvedValue(
+			MockChatModelACLAvailable,
+		);
 	}
 	if (updateError) {
 		spyOn(API.experimental, "updateChatModelACL").mockRejectedValue(
@@ -81,10 +98,6 @@ const addAutocompleteOption = async (
 	await userEvent.click(body.getByRole("button", { name: "Add member" }));
 };
 
-const refreshedACL: MockACL = {
-	user_roles: { [MockOrganizationMember.user_id]: "read" },
-	group_roles: { [MockGroup2.id]: "read" },
-};
 let currentServerACL = populatedACL;
 
 const ReopenableSharingDialog = () => {
@@ -129,6 +142,8 @@ export const EmptyACL: Story = {
 			await body.findByText("No shared members or groups yet"),
 		).toBeInTheDocument();
 		expect(body.getByRole("button", { name: "Save sharing" })).toBeDisabled();
+		expect(API.getOrganizationPaginatedMembers).not.toHaveBeenCalled();
+		expect(API.getGroupsByOrganization).not.toHaveBeenCalled();
 	},
 };
 
@@ -142,12 +157,49 @@ export const Loading: Story = {
 	},
 };
 
-export const LoadError: Story = {
+export const InitialACLFailureIsBlocking: Story = {
 	beforeEach: () => mockRequests({ aclError: new Error("Unable to load ACL") }),
 	play: async ({ canvasElement }) => {
 		const body = within(canvasElement.ownerDocument.body);
 		expect(await body.findByText("Unable to load ACL")).toBeInTheDocument();
 		expect(body.getByRole("button", { name: "Save sharing" })).toBeDisabled();
+		expect(
+			body.queryByRole("button", { name: "Search for user or group" }),
+		).not.toBeInTheDocument();
+		expect(
+			body.queryByRole("table", { name: "Shared model members and groups" }),
+		).not.toBeInTheDocument();
+	},
+};
+
+export const HydratedPrincipalsRenderWithoutIDs: Story = {
+	beforeEach: () => mockRequests({ acl: populatedACL }),
+	play: async ({ canvasElement }) => {
+		const body = within(canvasElement.ownerDocument.body);
+		expect(
+			await body.findByRole("row", {
+				name: new RegExp(MockUserMember.username, "i"),
+			}),
+		).toBeInTheDocument();
+		expect(
+			body.getByRole("row", {
+				name: new RegExp(MockGroup.display_name || MockGroup.name, "i"),
+			}),
+		).toBeInTheDocument();
+		expect(body.queryByText(MockUserMember.id)).not.toBeInTheDocument();
+		expect(body.queryByText(MockGroup.id)).not.toBeInTheDocument();
+		expect(API.getOrganizationPaginatedMembers).not.toHaveBeenCalled();
+		expect(API.getGroupsByOrganization).not.toHaveBeenCalled();
+	},
+};
+
+export const EveryoneGroup: Story = {
+	beforeEach: () => mockRequests({ acl: everyoneACL }),
+	play: async ({ canvasElement }) => {
+		const body = within(canvasElement.ownerDocument.body);
+		const everyoneRow = await body.findByRole("row", { name: /Everyone/i });
+		expect(everyoneRow).toHaveTextContent("Everyone");
+		expect(everyoneRow).toHaveTextContent("All users");
 	},
 };
 
@@ -157,18 +209,16 @@ export const AddUser: Story = {
 		const body = within(canvasElement.ownerDocument.body);
 		await addAutocompleteOption(
 			body,
-			MockOrganizationMember2.email,
-			new RegExp(MockOrganizationMember2.email, "i"),
+			MockUserMember.email,
+			new RegExp(MockUserMember.email, "i"),
 		);
 
 		expect(
 			body.getByRole("row", {
-				name: new RegExp(MockOrganizationMember2.username, "i"),
+				name: new RegExp(MockUserMember.username, "i"),
 			}),
 		).toBeVisible();
-		const saveButton = body.getByRole("button", { name: "Save sharing" });
-		expect(saveButton).toBeEnabled();
-		await userEvent.click(saveButton);
+		await userEvent.click(body.getByRole("button", { name: "Save sharing" }));
 
 		await waitFor(() =>
 			expect(API.experimental.updateChatModelACL).toHaveBeenCalledTimes(1),
@@ -176,7 +226,7 @@ export const AddUser: Story = {
 		expect(API.experimental.updateChatModelACL).toHaveBeenCalledWith(
 			MockDefaultOrganization.id,
 			mockGPT5.id,
-			{ user_roles: { [MockOrganizationMember2.user_id]: "read" } },
+			{ user_roles: { [MockUserMember.id]: "read" } },
 		);
 		expect(args.onOpenChange).toHaveBeenCalledWith(false);
 	},
@@ -197,9 +247,7 @@ export const AddGroup: Story = {
 				name: new RegExp(MockGroup2.display_name || MockGroup2.name, "i"),
 			}),
 		).toBeVisible();
-		const saveButton = body.getByRole("button", { name: "Save sharing" });
-		expect(saveButton).toBeEnabled();
-		await userEvent.click(saveButton);
+		await userEvent.click(body.getByRole("button", { name: "Save sharing" }));
 
 		await waitFor(() =>
 			expect(API.experimental.updateChatModelACL).toHaveBeenCalledTimes(1),
@@ -225,7 +273,7 @@ export const SelectedPrincipalsExcludedFromAutocomplete: Story = {
 
 		expect(
 			body.queryByRole("option", {
-				name: new RegExp(MockOrganizationMember2.email, "i"),
+				name: new RegExp(MockUserMember.email, "i"),
 			}),
 		).not.toBeInTheDocument();
 		expect(
@@ -233,18 +281,16 @@ export const SelectedPrincipalsExcludedFromAutocomplete: Story = {
 				name: new RegExp(MockGroup.display_name || MockGroup.name, "i"),
 			}),
 		).not.toBeInTheDocument();
-		await waitFor(() => {
-			expect(
-				body.getByRole("option", {
-					name: new RegExp(MockOrganizationMember.email, "i"),
-				}),
-			).toBeVisible();
-			expect(
-				body.getByRole("option", {
-					name: new RegExp(MockGroup2.display_name || MockGroup2.name, "i"),
-				}),
-			).toBeVisible();
-		});
+		expect(
+			await body.findByRole("option", {
+				name: new RegExp(MockUserOwner.email, "i"),
+			}),
+		).toBeInTheDocument();
+		expect(
+			body.getByRole("option", {
+				name: new RegExp(MockGroup2.display_name || MockGroup2.name, "i"),
+			}),
+		).toBeInTheDocument();
 	},
 };
 
@@ -259,7 +305,7 @@ export const SaveRemovalsAsSparseDelta: Story = {
 		);
 		await userEvent.click(
 			body.getByRole("button", {
-				name: `Remove ${MockOrganizationMember2.username}`,
+				name: `Remove ${MockUserMember.username}`,
 			}),
 		);
 		await userEvent.click(body.getByRole("button", { name: "Save sharing" }));
@@ -269,7 +315,7 @@ export const SaveRemovalsAsSparseDelta: Story = {
 				MockDefaultOrganization.id,
 				mockGPT5.id,
 				{
-					user_roles: { [MockOrganizationMember2.user_id]: "" },
+					user_roles: { [MockUserMember.id]: "" },
 					group_roles: { [MockGroup.id]: "" },
 				},
 			),
@@ -278,13 +324,49 @@ export const SaveRemovalsAsSparseDelta: Story = {
 	},
 };
 
+export const CandidateDiscoveryFailureKeepsACLUsable: Story = {
+	beforeEach: () =>
+		mockRequests({
+			acl: populatedACL,
+			availableError: new Error("Unable to discover principals"),
+		}),
+	play: async ({ canvasElement }) => {
+		const body = within(canvasElement.ownerDocument.body);
+		const userRow = await body.findByRole("row", {
+			name: new RegExp(MockUserMember.username, "i"),
+		});
+		await userEvent.click(
+			body.getByRole("button", { name: "Search for user or group" }),
+		);
+		expect(await body.findByRole("alert")).toHaveTextContent(
+			"Unable to discover principals",
+		);
+		expect(userRow).toBeInTheDocument();
+		await userEvent.click(
+			body.getByRole("button", { name: `Remove ${MockGroup.display_name}` }),
+		);
+		await userEvent.click(body.getByRole("button", { name: "Save sharing" }));
+
+		await waitFor(() =>
+			expect(API.experimental.updateChatModelACL).toHaveBeenCalledWith(
+				MockDefaultOrganization.id,
+				mockGPT5.id,
+				{ group_roles: { [MockGroup.id]: "" } },
+			),
+		);
+	},
+};
+
 export const ReopenUsesFreshACL: Story = {
 	render: () => <ReopenableSharingDialog />,
 	beforeEach: () => {
-		mockPrincipalRequests();
+		mockLegacyPrincipalRequests();
 		currentServerACL = populatedACL;
 		spyOn(API.experimental, "getChatModelACL").mockImplementation(
 			async () => currentServerACL,
+		);
+		spyOn(API.experimental, "getChatModelACLAvailable").mockResolvedValue(
+			MockChatModelACLAvailable,
 		);
 		spyOn(API.experimental, "updateChatModelACL").mockResolvedValue();
 	},
@@ -292,7 +374,7 @@ export const ReopenUsesFreshACL: Story = {
 		const body = within(canvasElement.ownerDocument.body);
 		expect(
 			await body.findByRole("row", {
-				name: new RegExp(MockOrganizationMember2.username, "i"),
+				name: new RegExp(MockUserMember.username, "i"),
 			}),
 		).toBeInTheDocument();
 		await userEvent.click(body.getByRole("button", { name: "Cancel" }));
@@ -307,7 +389,7 @@ export const ReopenUsesFreshACL: Story = {
 
 		expect(
 			await body.findByRole("row", {
-				name: new RegExp(MockOrganizationMember.username, "i"),
+				name: new RegExp(MockUserOwner.username, "i"),
 			}),
 		).toBeInTheDocument();
 		expect(
@@ -317,14 +399,14 @@ export const ReopenUsesFreshACL: Story = {
 		).toBeInTheDocument();
 		expect(
 			body.queryByRole("row", {
-				name: new RegExp(MockOrganizationMember2.username, "i"),
+				name: new RegExp(MockUserMember.username, "i"),
 			}),
 		).not.toBeInTheDocument();
-		expect(API.experimental.getChatModelACL).toHaveBeenCalled();
+		expect(API.experimental.getChatModelACL).toHaveBeenCalledTimes(2);
 	},
 };
 
-export const SaveErrorKeepsEditorOpen: Story = {
+export const SaveErrorPreservesDraft: Story = {
 	beforeEach: () =>
 		mockRequests({
 			acl: populatedACL,
@@ -345,6 +427,12 @@ export const SaveErrorKeepsEditorOpen: Story = {
 			"data-state",
 			"open",
 		);
+		expect(
+			body.queryByRole("row", {
+				name: new RegExp(MockGroup.display_name || MockGroup.name, "i"),
+			}),
+		).not.toBeInTheDocument();
+		expect(body.getByRole("button", { name: "Save sharing" })).toBeEnabled();
 		expect(args.onOpenChange).not.toHaveBeenCalledWith(false);
 	},
 };
