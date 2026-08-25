@@ -61,3 +61,27 @@ func TestHTTPClientWithHeadersGuardsClientWithoutTransport(t *testing.T) {
 	require.Error(t, err)
 	require.Zero(t, hits.Load())
 }
+
+// TestMCPTransportTimeouts guards the transport hardening: MCP
+// traffic must never ride a transport without dial and
+// response-header bounds, or a black-holed server holds
+// connections until the enclosing context expires.
+func TestMCPTransportTimeouts(t *testing.T) {
+	t.Parallel()
+
+	client := NewHTTPClient(nil)
+	tr, ok := client.Transport.(*http.Transport)
+	require.True(t, ok)
+	require.NotNil(t, tr.DialContext)
+	require.Equal(t, responseHeaderTimeout, tr.ResponseHeaderTimeout)
+	// The response-header bound must not undercut the tool-call
+	// budget, or slow JSON-response tools within budget would be
+	// killed at the HTTP layer.
+	require.GreaterOrEqual(t, responseHeaderTimeout, toolCallTimeout)
+
+	// Clients are built per call with private transports, so closed
+	// test servers cannot leave stale pooled connections behind for
+	// later clients that reuse the same address.
+	other := NewHTTPClient(nil)
+	require.NotSame(t, client.Transport, other.Transport)
+}
