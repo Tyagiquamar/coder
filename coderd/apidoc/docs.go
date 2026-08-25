@@ -28992,7 +28992,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "enabled": {
-                    "description": "Enabled is stored intent. Deployment policy may block a stored target.",
+                    "description": "Enabled controls whether the secret is injected into workspaces.\nDisabled secrets remain visible and editable, but are not added\nto the agent manifest, so they are not exposed as environment\nvariables or written to secret files.",
                     "type": "boolean"
                 },
                 "env_name": {

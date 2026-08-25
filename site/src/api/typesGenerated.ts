@@ -4325,9 +4325,12 @@ export interface CreateUserRequestWithOrgs {
 // From codersdk/usersecrets.go
 /**
  * CreateUserSecretRequest is the payload for creating a new user
- * secret. Name and Value are required. An enabled secret requires an
- * effective target; deployment policy may reject FilePath and require EnvName.
- * Enabled defaults to true.
+ * secret. Name and Value are required. An enabled secret must have at
+ * least one of EnvName or FilePath non-empty so it has an injection
+ * target; to keep a secret without injecting it, set Enabled to false.
+ * A deployment may disable file path delivery, which rejects a
+ * non-empty FilePath. All other fields are optional and default to
+ * empty string. Enabled defaults to true when omitted.
  */
 export interface CreateUserSecretRequest {
 	readonly name: string;
@@ -10247,8 +10250,12 @@ export interface UpdateUserQuietHoursScheduleRequest {
 /**
  * UpdateUserSecretRequest is the payload for partially updating a
  * user secret. At least one field must be non-nil. Pointer fields
- * distinguish "not sent" from "set empty". An enabled post-update row
- * requires an effective target; deployment policy may require EnvName.
+ * distinguish "not sent" (nil) from "set to empty string" (pointer
+ * to empty string). If the post-update row is enabled it must still
+ * have at least one of EnvName or FilePath non-empty; clearing both
+ * targets is only allowed when the secret is (or becomes) disabled.
+ * When a deployment disables file path delivery, an enabled row also
+ * requires EnvName.
  */
 export interface UpdateUserSecretRequest {
 	readonly value?: string;
@@ -10753,7 +10760,10 @@ export interface UserSecret {
 	readonly env_name: string;
 	readonly file_path: string;
 	/**
-	 * Enabled is stored intent. Deployment policy may block a stored target.
+	 * Enabled controls whether the secret is injected into workspaces.
+	 * Disabled secrets remain visible and editable, but are not added
+	 * to the agent manifest, so they are not exposed as environment
+	 * variables or written to secret files.
 	 */
 	readonly enabled: boolean;
 	readonly created_at: string;
