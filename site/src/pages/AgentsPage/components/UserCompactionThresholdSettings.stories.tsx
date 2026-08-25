@@ -7,6 +7,7 @@ import {
 	withAuthProvider,
 	withDashboardProvider,
 } from "#/testHelpers/storybook";
+import type { OrganizationCompactionTrigger } from "../compactionTriggers";
 import { UserCompactionThresholdSettings } from "./UserCompactionThresholdSettings";
 
 const organizationWithEmptyDisplayName = {
@@ -14,6 +15,23 @@ const organizationWithEmptyDisplayName = {
 	id: MockChatModel.organization_id,
 	display_name: "",
 };
+
+const compactionModel: TypesGen.ChatModel = {
+	...MockChatModel,
+	id: "compaction-model",
+	model: "compact-mini",
+	display_name: "Compact Mini",
+	context_limit: 32_000,
+	compression_threshold: 50,
+};
+const compactionTrigger: OrganizationCompactionTrigger = {
+	model: compactionModel,
+	trigger: { thresholdPercent: 50, contextLimit: 32_000 },
+	point: 16_000,
+};
+const compactionTriggersByOrganizationID = new Map([
+	[MockChatModel.organization_id, compactionTrigger],
+]);
 
 const mockModels: TypesGen.ChatModel[] = [
 	{
@@ -62,6 +80,7 @@ const meta = {
 		organizationNameByID: new Map<string, string>([
 			[MockChatModel.organization_id, MockDefaultOrganization.display_name],
 		]),
+		compactionTriggersByOrganizationID: new Map(),
 		thresholds: [],
 		isThresholdsLoading: false,
 		thresholdsError: undefined,
@@ -265,13 +284,47 @@ export const DisableCompactionWarning: Story = {
 		await waitFor(() => {
 			expect(
 				canvas.getByText(
-					"Setting 100% will disable auto-compaction for this model.",
+					"Setting 100% disables this model's compaction trigger.",
 				),
 			).toBeInTheDocument();
 		});
 	},
 };
 
+export const OrganizationCompactionTriggerWarning: Story = {
+	args: {
+		compactionTriggersByOrganizationID,
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		const gpt4oRow = canvas.getByRole("row", { name: /GPT-4o/i });
+		const row = within(gpt4oRow);
+
+		expect(
+			row.getByText(/Compaction will trigger earlier at approximately 12.5%/i),
+		).toBeVisible();
+		expect(row.getByText(/Compact Mini compacts at 50%/i)).toBeVisible();
+
+		await userEvent.type(
+			row.getByRole("textbox", { name: /GPT-4o compaction threshold/i }),
+			"10",
+		);
+		await waitFor(() => {
+			expect(
+				row.queryByText(/Compaction will trigger earlier/i),
+			).not.toBeInTheDocument();
+		});
+	},
+};
+
+export const NoOrganizationCompactionOverride: Story = {
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		expect(
+			canvas.queryByText(/Compaction will trigger earlier/i),
+		).not.toBeInTheDocument();
+	},
+};
 export const Loading: Story = {
 	args: {
 		isThresholdsLoading: true,

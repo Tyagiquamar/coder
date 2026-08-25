@@ -1,4 +1,4 @@
-import { RotateCcwIcon } from "lucide-react";
+import { RotateCcwIcon, TriangleAlertIcon } from "lucide-react";
 import { type FC, useState } from "react";
 import { getErrorMessage } from "#/api/errors";
 import type * as TypesGen from "#/api/typesGenerated";
@@ -26,12 +26,22 @@ import {
 } from "#/components/Tooltip/Tooltip";
 import { formatProviderLabel } from "#/utils/aiProviders";
 import { cn } from "#/utils/cn";
+import {
+	bindingCompactionTrigger,
+	compactionPointAsPercent,
+	compactionTriggerPoint,
+	type OrganizationCompactionTrigger,
+} from "../compactionTriggers";
 import { ProviderIcon } from "./ChatModelAdminPanel/ProviderIcon";
 
 interface UserCompactionThresholdSettingsProps {
 	models: readonly TypesGen.ChatModel[];
 	providerTypeByID: ReadonlyMap<string, string>;
 	organizationNameByID: ReadonlyMap<string, string>;
+	compactionTriggersByOrganizationID: ReadonlyMap<
+		string,
+		OrganizationCompactionTrigger
+	>;
 	modelsError?: unknown;
 	isLoadingModels?: boolean;
 	thresholds: readonly TypesGen.UserChatCompactionThreshold[] | undefined;
@@ -58,14 +68,18 @@ const parseThresholdDraft = (value: string): number | null => {
 	return parsedValue;
 };
 
-const ContextCompactionHeader: FC = () => (
+const ContextCompactionHeader: FC<{
+	hasOrganizationCompactionOverride: boolean;
+}> = ({ hasOrganizationCompactionOverride }) => (
 	<div className="flex flex-col gap-2">
 		<h3 className="m-0 text-sm font-semibold text-content-primary">
 			Context compaction
 		</h3>
 		<p className="!mt-0.5 m-0 text-xs text-content-secondary">
 			Control when conversation context is automatically summarized for each
-			model. Setting 100% means the conversation will never auto-compact.
+			model. Setting 100% disables that model&apos;s compaction trigger.
+			{hasOrganizationCompactionOverride &&
+				" An organization compaction model may still trigger compaction."}
 		</p>
 	</div>
 );
@@ -76,6 +90,7 @@ export const UserCompactionThresholdSettings: FC<
 	models,
 	providerTypeByID,
 	organizationNameByID,
+	compactionTriggersByOrganizationID,
 	modelsError,
 	isLoadingModels,
 	thresholds,
@@ -88,6 +103,8 @@ export const UserCompactionThresholdSettings: FC<
 	const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
 	const [pendingModels, setPendingModels] = useState<Set<string>>(new Set());
 	const { isSavedVisible, showSavedState } = useTemporarySavedState();
+	const hasOrganizationCompactionOverride =
+		compactionTriggersByOrganizationID.size > 0;
 
 	const enabledModels = models.filter((config) => config.enabled);
 	const overridesByModelID = new Map(
@@ -210,7 +227,9 @@ export const UserCompactionThresholdSettings: FC<
 	if (isThresholdsLoading) {
 		return (
 			<div className="flex flex-col gap-2">
-				<ContextCompactionHeader />
+				<ContextCompactionHeader
+					hasOrganizationCompactionOverride={hasOrganizationCompactionOverride}
+				/>
 				<div className="flex items-center gap-2 text-sm text-content-secondary">
 					<Spinner loading className="size-4" />
 					Loading thresholds...
@@ -222,7 +241,9 @@ export const UserCompactionThresholdSettings: FC<
 	if (thresholdsError != null) {
 		return (
 			<div className="flex flex-col gap-2">
-				<ContextCompactionHeader />
+				<ContextCompactionHeader
+					hasOrganizationCompactionOverride={hasOrganizationCompactionOverride}
+				/>
 				<p className="m-0 text-xs text-content-destructive">
 					{getErrorMessage(
 						thresholdsError,
@@ -235,7 +256,9 @@ export const UserCompactionThresholdSettings: FC<
 
 	return (
 		<div className="flex flex-col gap-3">
-			<ContextCompactionHeader />
+			<ContextCompactionHeader
+				hasOrganizationCompactionOverride={hasOrganizationCompactionOverride}
+			/>
 			{isLoadingModels ? (
 				<div className="flex items-center gap-2 text-sm text-content-secondary">
 					<Spinner loading className="size-4" />
@@ -295,6 +318,38 @@ export const UserCompactionThresholdSettings: FC<
 								const organizationName =
 									organizationNameByID.get(modelConfig.organization_id) ??
 									modelConfig.organization_id;
+								const effectiveThresholdPercent =
+									parsedDraftValue ??
+									(draftValue.length === 0
+										? modelConfig.compression_threshold
+										: undefined);
+								const organizationTrigger =
+									compactionTriggersByOrganizationID.get(
+										modelConfig.organization_id,
+									);
+								const chatTrigger =
+									effectiveThresholdPercent === undefined
+										? undefined
+										: {
+												thresholdPercent: effectiveThresholdPercent,
+												contextLimit: modelConfig.context_limit,
+											};
+								const organizationTriggerPercent = organizationTrigger
+									? compactionPointAsPercent(
+											organizationTrigger.point,
+											modelConfig.context_limit,
+										)
+									: undefined;
+								const isOrganizationTriggerEarlier =
+									chatTrigger !== undefined &&
+									organizationTrigger !== undefined &&
+									organizationTriggerPercent !== undefined &&
+									bindingCompactionTrigger(
+										chatTrigger,
+										organizationTrigger.trigger,
+									) === "organization" &&
+									organizationTrigger.point <
+										compactionTriggerPoint(chatTrigger);
 
 								return (
 									<TableRow key={modelConfig.id}>
@@ -319,6 +374,37 @@ export const UserCompactionThresholdSettings: FC<
 													className="m-0 mt-0.5 text-2xs font-normal text-content-destructive"
 												>
 													{rowError}
+												</p>
+											)}
+											{isOrganizationTriggerEarlier && organizationTrigger && (
+												<p
+													role="status"
+													className="m-0 mt-1 flex max-w-xl items-start gap-1 text-2xs font-normal text-content-warning"
+												>
+													<TriangleAlertIcon
+														aria-hidden
+														className="mt-px size-3 shrink-0"
+													/>
+													<span>
+														Compaction will trigger earlier at approximately{" "}
+														{organizationTriggerPercent?.toLocaleString(
+															"en-US",
+															{
+																maximumFractionDigits: 1,
+															},
+														)}
+														% of this model&apos;s window because the
+														organization compaction model{" "}
+														{organizationTrigger.model.display_name.trim() ||
+															organizationTrigger.model.model}{" "}
+														compacts at{" "}
+														{organizationTrigger.model.compression_threshold}%
+														of its{" "}
+														{organizationTrigger.model.context_limit.toLocaleString(
+															"en-US",
+														)}
+														-token window.
+													</span>
 												</p>
 											)}
 										</TableCell>
@@ -368,7 +454,9 @@ export const UserCompactionThresholdSettings: FC<
 														<TooltipContent>
 															{isInvalid
 																? "Enter a whole number between 0 and 100."
-																: "Setting 100% will disable auto-compaction for this model."}
+																: organizationTrigger
+																	? "Setting 100% disables this model's compaction trigger. The organization compaction model may still trigger compaction."
+																	: "Setting 100% disables this model's compaction trigger."}
 														</TooltipContent>
 													)}
 												</Tooltip>
@@ -407,8 +495,10 @@ export const UserCompactionThresholdSettings: FC<
 											)}
 											{isDraftDisablingCompaction && (
 												<span className="sr-only" aria-live="polite">
-													Setting 100% will disable auto-compaction for this
-													model.
+													Setting 100% disables this model&apos;s compaction
+													trigger.
+													{organizationTrigger &&
+														" The organization compaction model may still trigger compaction."}
 												</span>
 											)}
 										</TableCell>

@@ -24,6 +24,7 @@ const baseArgs: AgentSettingsCompactionPageViewProps = {
 	organizationNameByID: new Map<string, string>([
 		[MockDefaultOrganization.id, MockDefaultOrganization.display_name],
 	]),
+	compactionTriggersByOrganizationID: new Map(),
 	modelsError: undefined,
 	isLoadingModels: false,
 	thresholds: [
