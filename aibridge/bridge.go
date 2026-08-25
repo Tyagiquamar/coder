@@ -246,7 +246,23 @@ func newInterceptionProcessor(p provider.Provider, cbs *circuitbreaker.ProviderC
 		defer span.End()
 
 		if isWebSocketUpgrade(r) {
-			logger.Debug(ctx, "rejecting unsupported WebSocket upgrade", slog.F("path", r.URL.Path))
+			route := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/%s", p.Name()))
+			client := GuessClient(r)
+			fields := []slog.Field{
+				slog.F("provider", p.Name()),
+				slog.F("provider_type", p.Type()),
+				slog.F("route", route),
+				slog.F("method", r.Method),
+				slog.F("client", string(client)),
+				slog.F("user_agent", r.UserAgent()),
+			}
+			if sessionID := GuessSessionID(client, r); sessionID != nil {
+				fields = append(fields, slog.F("client_session_id", *sessionID))
+			}
+			if actor := aibcontext.ActorFromContext(ctx); actor != nil {
+				fields = append(fields, slog.F("initiator_id", actor.ID))
+			}
+			logger.Debug(ctx, "rejecting unsupported WebSocket upgrade", fields...)
 			http.Error(w, "WebSocket transport is not supported; use HTTP", http.StatusNotImplemented)
 			return
 		}
