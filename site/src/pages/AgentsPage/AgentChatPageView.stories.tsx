@@ -85,6 +85,7 @@ const buildEditing = (
 	remountKey: 0,
 	editingMessageId: null as number | null,
 	editingQueuedMessageId: null as number | null,
+	isEditingQueuedMessage: false,
 	editingFileBlocks: [] as readonly ChatMessagePart[],
 	handleEditUserMessage: fn(),
 	handleEditQueuedMessage: fn(),

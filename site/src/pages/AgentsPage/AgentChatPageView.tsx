@@ -91,6 +91,7 @@ interface EditingState {
 	remountKey: number;
 	editingMessageId: number | null;
 	editingQueuedMessageId: number | null;
+	isEditingQueuedMessage: boolean;
 	editingFileBlocks: readonly ChatMessagePart[];
 	handleEditUserMessage: (
 		messageId: number,
@@ -1040,6 +1041,7 @@ export const AgentChatPageView: FC<AgentChatPageViewProps> = ({
 								onContentChange={editing.handleContentChange}
 								isEditing={isEditing}
 								editingQueuedMessageId={editing.editingQueuedMessageId}
+								isEditingQueuedMessage={editing.isEditingQueuedMessage}
 								onQueuedEditTargetDrained={
 									editing.handleQueuedEditTargetDrained
 								}

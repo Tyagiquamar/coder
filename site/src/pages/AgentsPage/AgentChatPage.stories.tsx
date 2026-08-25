@@ -3557,8 +3557,9 @@ export const EnterSavesQueuedMessageEdit: Story = {
 	},
 };
 
-// The worker can promote the message being edited. The composer must
-// leave queued-edit mode instead of saving into a drained queue.
+// The worker can promote the message being edited. The edit stays open
+// with the history guidance; until the promoted message is observed,
+// submitting sends the composer content immediately.
 export const QueuedEditTargetPromotedWhileEditing: Story = {
 	parameters: {
 		queries: buildQueries(queuedEditChat, queuedEditMessages, {
@@ -3571,13 +3572,16 @@ export const QueuedEditTargetPromotedWhileEditing: Story = {
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
 		const updateSpy = spyOn(API.experimental, "updateChatQueuedMessage");
+		const sendSpy = spyOn(
+			API.experimental,
+			"createChatMessage",
+		).mockResolvedValue({
+			queued: false,
+			messages: [],
+		});
 		spyOn(API.experimental, "promoteChatQueuedMessage").mockResolvedValue(
 			undefined,
 		);
-		spyOn(API.experimental, "getChatMessages").mockResolvedValue({
-			...queuedEditMessages,
-			queued_messages: [],
-		});
 
 		await userEvent.click(
 			await canvas.findByRole("button", { name: "Edit queued message" }),
@@ -3588,14 +3592,97 @@ export const QueuedEditTargetPromotedWhileEditing: Story = {
 
 		await userEvent.click(canvas.getByRole("button", { name: "Send now" }));
 
-		// Edit mode ends once the target leaves the queue, and the typed
-		// text stays in the composer.
+		// The message is sent now, so the composer switches to the history
+		// edit guidance while keeping the edit open.
 		await waitFor(() =>
-			expect(
-				canvas.queryByText(/Editing a queued message\./),
-			).not.toBeInTheDocument(),
+			expect(canvas.getByText(/delete all subsequent messages/)).toBeVisible(),
 		);
 		expect(editor).toHaveTextContent("Queued prompt");
+
+		await userEvent.click(editor);
+		await userEvent.type(editor, " edited");
+		await userEvent.keyboard("{Enter}");
+
+		// The promoted message has not been observed, so the submission
+		// sends the composer content instead of failing.
+		await waitFor(() => {
+			expect(sendSpy).toHaveBeenCalledWith(
+				CHAT_ID,
+				expect.objectContaining({
+					content: [{ type: "text", text: "Queued prompt edited" }],
+				}),
+			);
+		});
+		expect(updateSpy).not.toHaveBeenCalled();
+	},
+};
+
+// Once the promoted message is observed, the open edit retargets it and
+// submits through the history edit path.
+export const QueuedEditRetargetsPromotedMessage: Story = {
+	parameters: {
+		queries: buildQueries(queuedEditChat, queuedEditMessages, {
+			diffUrl: undefined,
+		}),
+	},
+	beforeEach: () => {
+		spyOn(API.experimental, "getUserSkills").mockResolvedValue([]);
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		const promotedMessage: TypesGen.ChatMessage = {
+			...MockChatMessage,
+			id: 77,
+			chat_id: CHAT_ID,
+			role: "user",
+			created_at: "2024-01-01T00:02:00Z",
+			content: [{ type: "text", text: "Queued prompt" }],
+		};
+		const updateSpy = spyOn(API.experimental, "updateChatQueuedMessage");
+		const editSpy = spyOn(
+			API.experimental,
+			"editChatMessage",
+		).mockResolvedValue({
+			message: { ...promotedMessage, id: 78 },
+		});
+		// Drains the queue and reports the promoted content in history,
+		// which is the state the stream converges on after a promotion.
+		spyOn(API.experimental, "deleteChatQueuedMessage").mockResolvedValue(
+			undefined,
+		);
+		spyOn(API.experimental, "getChatMessages").mockResolvedValue({
+			...queuedEditMessages,
+			messages: [...queuedEditMessages.messages, promotedMessage],
+			queued_messages: [],
+		});
+
+		await userEvent.click(
+			await canvas.findByRole("button", { name: "Edit queued message" }),
+		);
+		const editor = await canvas.findByTestId("chat-message-input");
+		await waitFor(() => expect(editor).toHaveTextContent("Queued prompt"));
+
+		await userEvent.click(
+			canvas.getByRole("button", { name: "Remove from queue" }),
+		);
+
+		await waitFor(() =>
+			expect(canvas.getByText(/delete all subsequent messages/)).toBeVisible(),
+		);
+
+		await userEvent.click(editor);
+		await userEvent.type(editor, " edited");
+		await userEvent.keyboard("{Enter}");
+
+		await waitFor(() => {
+			expect(editSpy).toHaveBeenCalledWith(
+				CHAT_ID,
+				77,
+				expect.objectContaining({
+					content: [{ type: "text", text: "Queued prompt edited" }],
+				}),
+			);
+		});
 		expect(updateSpy).not.toHaveBeenCalled();
 	},
 };

@@ -142,16 +142,6 @@ const AGENT_BINDING_REPAIR_POLL_MS = 30_000;
 
 class CompactCommandPendingError extends Error {}
 
-// Raised when a queued-message edit cannot be saved because the target
-// left the queue. The composer keeps the typed text and exits edit mode
-// instead of surfacing a failed request.
-class QueuedEditTargetDrainedError extends Error {}
-
-// Shown when the queued message being edited was promoted before the
-// edit could be saved.
-const queuedEditTargetDrainedMessage =
-	"That message was already sent, so your edit was not saved. The text is still in the composer.";
-
 /** @internal Exported for testing. */
 export const draftInputStorageKeyPrefix = "agents.draft-input.";
 
@@ -571,6 +561,10 @@ export function useConversationEditingState(deps: {
 	const [editingQueuedMessageId, setEditingQueuedMessageId] = useState<
 		number | null
 	>(null);
+	// True once the queued message being edited has left the queue but
+	// the promoted history message is not resolvable yet. The edit stays
+	// open and submits as a send or a history edit, whichever applies.
+	const [queuedEditTargetDrained, setQueuedEditTargetDrained] = useState(false);
 	const [draftBeforeEdit, setDraftBeforeEdit] = useState<ParsedDraft | null>(
 		null,
 	);
@@ -621,6 +615,7 @@ export function useConversationEditingState(deps: {
 	) => {
 		captureDraftBeforeEdit();
 		setEditingQueuedMessageId(null);
+		setQueuedEditTargetDrained(false);
 		setEditingMessageId(messageId);
 		loadEditedTextIntoComposer(text, fileBlocks);
 	};
@@ -632,6 +627,7 @@ export function useConversationEditingState(deps: {
 	) => {
 		captureDraftBeforeEdit();
 		setEditingMessageId(null);
+		setQueuedEditTargetDrained(false);
 		setEditingQueuedMessageId(queuedMessageId);
 		loadEditedTextIntoComposer(text, fileBlocks);
 	};
@@ -648,42 +644,48 @@ export function useConversationEditingState(deps: {
 		inputValueRef.current = savedText;
 		setEditingMessageId(null);
 		setEditingQueuedMessageId(null);
+		setQueuedEditTargetDrained(false);
 		setDraftBeforeEdit(null);
 		setEditingFileBlocks([]);
 	};
 
-	// Leaves queued-edit mode without restoring the pre-edit draft: the
-	// text the user typed stays in the composer so it can be sent as a
-	// new message.
-	const handleQueuedEditTargetDrained = () => {
+	// The queued message being edited was promoted, so its send time has
+	// passed. The edit stays open and retargets the promoted history
+	// message, which restarts the conversation from it. Until that
+	// message can be resolved the edit stays pending, and submitting
+	// falls back to a plain send.
+	const handleQueuedEditTargetDrained = (promotedMessageID: number | null) => {
 		if (editingQueuedMessageId === null) {
 			return;
 		}
+		if (promotedMessageID === null) {
+			setQueuedEditTargetDrained(true);
+			return;
+		}
 		setEditingQueuedMessageId(null);
-		setDraftBeforeEdit(null);
-		setEditingFileBlocks([]);
-		toast.info(queuedEditTargetDrainedMessage);
+		setQueuedEditTargetDrained(false);
+		setEditingMessageId(promotedMessageID);
 	};
 
 	// Clears the composer for an in-flight history edit and
 	// returns a rollback function that restores the editing draft
-	// if the send fails. Callers that must not re-enter edit mode,
-	// such as a queued target that left the queue, pass
-	// resumeEditing: false to restore only the text.
+	// if the send fails.
 	const clearInputForEdit = (message: string) => {
 		const snapshot = {
 			editorState: serializedEditorStateRef.current,
 			fileBlocks: editingFileBlocks,
 			messageId: editingMessageId,
 			queuedMessageId: editingQueuedMessageId,
+			queuedTargetDrained: queuedEditTargetDrained,
 		};
 
 		chatInputRef.current?.clear();
 		inputValueRef.current = "";
 		setEditingMessageId(null);
 		setEditingQueuedMessageId(null);
+		setQueuedEditTargetDrained(false);
 
-		return ({ resumeEditing = true }: { resumeEditing?: boolean } = {}) => {
+		return () => {
 			setDraftState({
 				editorInitialValue: message,
 				initialEditorState: snapshot.editorState,
@@ -691,13 +693,9 @@ export function useConversationEditingState(deps: {
 			serializedEditorStateRef.current = snapshot.editorState;
 			setRemountKey((k) => k + 1);
 			inputValueRef.current = message;
-			if (!resumeEditing) {
-				setDraftBeforeEdit(null);
-				setEditingFileBlocks([]);
-				return;
-			}
 			setEditingMessageId(snapshot.messageId);
 			setEditingQueuedMessageId(snapshot.queuedMessageId);
+			setQueuedEditTargetDrained(snapshot.queuedTargetDrained);
 			setEditingFileBlocks(snapshot.fileBlocks);
 		};
 	};
@@ -745,10 +743,6 @@ export function useConversationEditingState(deps: {
 			await sendPromise;
 		} catch (error) {
 			if (error instanceof CompactCommandPendingError) {
-				return;
-			}
-			if (error instanceof QueuedEditTargetDrainedError) {
-				rollback?.({ resumeEditing: false });
 				return;
 			}
 			rollback?.();
@@ -809,6 +803,10 @@ export function useConversationEditingState(deps: {
 		remountKey,
 		editingMessageId,
 		editingQueuedMessageId,
+		// A drained queued target is no longer queued, so the composer
+		// shows the history-edit guidance.
+		isEditingQueuedMessage:
+			editingQueuedMessageId !== null && !queuedEditTargetDrained,
 		editingFileBlocks,
 		handleEditUserMessage,
 		handleEditQueuedMessage,
@@ -936,6 +934,9 @@ const AgentChatPage: FC = () => {
 	const [selectedModel, setSelectedModel] = useState("");
 	const [selectedReasoningEffort, setSelectedReasoningEffort] = useState("");
 	const isEditReasoningEffortDirtyRef = useRef(false);
+	// Text of the queued message when its edit started. Used to match the
+	// promoted history message if the queue drains mid-edit.
+	const queuedEditOriginalTextRef = useRef("");
 	const chatInputRef = useRef<ChatMessageInputRef | null>(null);
 	const inputValueRef = useRef(
 		agentId
@@ -1601,7 +1602,36 @@ const AgentChatPage: FC = () => {
 		const { text, fileBlocks } = getEditableContentPayload(
 			queuedMessage.content,
 		);
+		queuedEditOriginalTextRef.current = text;
 		editing.handleEditQueuedMessage(id, text, fileBlocks);
+	};
+
+	// Promotion inserts the queued content as a user message without
+	// reporting the new ID, so the promoted message is matched by its
+	// content, newest first. Returns undefined when it has not been
+	// observed yet, which makes the submission a plain send.
+	const resolvePromotedQueuedMessageID = (): number | undefined => {
+		const originalText = queuedEditOriginalTextRef.current;
+		if (!originalText) {
+			return undefined;
+		}
+		const { messagesByID, orderedMessageIDs } = store.getSnapshot();
+		for (let index = orderedMessageIDs.length - 1; index >= 0; index -= 1) {
+			const candidate = messagesByID.get(orderedMessageIDs[index]);
+			if (candidate?.role !== "user") {
+				continue;
+			}
+			if (getEditableContentPayload(candidate.content).text === originalText) {
+				return candidate.id;
+			}
+		}
+		return undefined;
+	};
+
+	const handleQueuedEditTargetDrained = () => {
+		editing.handleQueuedEditTargetDrained(
+			resolvePromotedQueuedMessageID() ?? null,
+		);
 	};
 
 	const chatTitle = chatQuery.data?.title;
@@ -1785,45 +1815,48 @@ const AgentChatPage: FC = () => {
 		// A queued-message edit replaces the stored content in place.
 		// The message keeps its queue position and stays queued, so no
 		// turn is started and chat status is untouched.
+		//
+		// The worker can promote the target between loading it into the
+		// composer and saving. Its send time has passed, so the
+		// submission becomes an edit of the promoted message, or a plain
+		// send when that message cannot be identified.
+		let historyEditMessageID = editedMessageID;
 		if (editedQueuedMessageID !== undefined) {
-			// The worker can promote the target between loading it into
-			// the composer and saving, which would make the request fail
-			// against a drained queue.
 			const stillQueued = store
 				.getSnapshot()
 				.queuedMessages.some(
 					(queuedMessage) => queuedMessage.id === editedQueuedMessageID,
 				);
-			if (!stillQueued) {
-				toast.info(queuedEditTargetDrainedMessage);
-				throw new QueuedEditTargetDrainedError();
-			}
-			let response: Awaited<ReturnType<typeof updateQueuedMessage>>;
-			try {
-				response = await updateQueuedMessage({
-					queuedMessageId: editedQueuedMessageID,
-					req: { content },
-				});
-			} catch (error) {
-				// A 409 means the queue drained after the check above. That
-				// is the same race, not a chat error worth persisting.
-				if (isApiError(error) && error.response?.status === 409) {
-					toast.info(queuedEditTargetDrainedMessage);
-					throw new QueuedEditTargetDrainedError();
+			let response: Awaited<ReturnType<typeof updateQueuedMessage>> | undefined;
+			if (stillQueued) {
+				try {
+					response = await updateQueuedMessage({
+						queuedMessageId: editedQueuedMessageID,
+						req: { content },
+					});
+				} catch (error) {
+					// A 409 means the queue drained after the check above,
+					// so the submission takes the same route.
+					if (!isApiError(error) || error.response?.status !== 409) {
+						handleRequestError(error);
+						throw error;
+					}
 				}
-				handleRequestError(error);
-				throw error;
 			}
-			const updatedQueue = store
-				.getSnapshot()
-				.queuedMessages.map((queuedMessage) =>
-					queuedMessage.id === response.queued_message.id
-						? response.queued_message
-						: queuedMessage,
-				);
-			store.setQueuedMessages(updatedQueue);
-			setCacheQueuedMessages(updatedQueue);
-			return;
+			if (response) {
+				const updatedResponse = response;
+				const updatedQueue = store
+					.getSnapshot()
+					.queuedMessages.map((queuedMessage) =>
+						queuedMessage.id === updatedResponse.queued_message.id
+							? updatedResponse.queued_message
+							: queuedMessage,
+					);
+				store.setQueuedMessages(updatedQueue);
+				setCacheQueuedMessages(updatedQueue);
+				return;
+			}
+			historyEditMessageID = resolvePromotedQueuedMessageID();
 		}
 
 		// "/compact" on its own (no attachments or file references)
@@ -1832,7 +1865,7 @@ const AgentChatPage: FC = () => {
 		// original meaning, and a personal or workspace
 		// skill named "compact" takes precedence so the command cannot shadow it.
 		const isExactCompactSubmission =
-			editedMessageID === undefined &&
+			historyEditMessageID === undefined &&
 			content.length === 1 &&
 			content[0].type === "text" &&
 			content[0].text?.trim() ===
@@ -1864,9 +1897,9 @@ const AgentChatPage: FC = () => {
 			return;
 		}
 
-		if (editedMessageID !== undefined) {
+		if (historyEditMessageID !== undefined) {
 			const originalEditedMessage = chatMessagesList?.find(
-				(existingMessage) => existingMessage.id === editedMessageID,
+				(existingMessage) => existingMessage.id === historyEditMessageID,
 			);
 			const originalModelConfigID = originalEditedMessage?.model_config_id;
 			const pickerModelConfigID = effectiveSelectedModel || undefined;
@@ -1914,7 +1947,7 @@ const AgentChatPage: FC = () => {
 			await submitEdit({
 				editMessage,
 				editArgs: {
-					messageId: editedMessageID,
+					messageId: historyEditMessageID,
 					optimisticMessage,
 					req: request,
 				},
@@ -2169,7 +2202,11 @@ const AgentChatPage: FC = () => {
 			store={store}
 			initialChatStatus={chatQuery.data.status}
 			initialMessages={chatMessagesList ?? []}
-			editing={{ ...editing, handleEditUserMessage }}
+			editing={{
+				...editing,
+				handleEditUserMessage,
+				handleQueuedEditTargetDrained,
+			}}
 			effectiveSelectedModel={effectiveSelectedModel}
 			setSelectedModel={setSelectedModel}
 			modelOptions={modelOptions}

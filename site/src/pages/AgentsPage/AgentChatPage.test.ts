@@ -865,23 +865,48 @@ describe("useConversationEditingState", () => {
 		unmount();
 	});
 
-	it("leaves queued edit mode and keeps the typed text when the target is drained", () => {
+	it("retargets the edit at the promoted message when the queued target is drained", () => {
 		const { result, unmount } = renderEditing();
 
-		act(() => {
-			result.current.handleContentChange("live draft", "{}", false);
-		});
 		act(() => {
 			result.current.handleEditQueuedMessage(42, "queued text");
 		});
 		act(() => {
-			result.current.handleQueuedEditTargetDrained();
+			result.current.handleQueuedEditTargetDrained(7);
 		});
 
 		expect(result.current.editingQueuedMessageId).toBeNull();
-		// The pre-edit draft is not restored: the edited text stays so it
-		// can be sent as a new message.
+		expect(result.current.editingMessageId).toBe(7);
+		expect(result.current.isEditingQueuedMessage).toBe(false);
 		expect(result.current.editorInitialValue).toBe("queued text");
+		unmount();
+	});
+
+	it("keeps the edit open when the promoted message is not resolvable yet", async () => {
+		const { result, onSend, unmount } = renderEditing();
+
+		act(() => {
+			result.current.handleEditQueuedMessage(42, "queued text");
+		});
+		act(() => {
+			result.current.handleQueuedEditTargetDrained(null);
+		});
+
+		expect(result.current.editingQueuedMessageId).toBe(42);
+		// The message is no longer queued, so the composer drops the
+		// queued-edit guidance while the edit stays open.
+		expect(result.current.isEditingQueuedMessage).toBe(false);
+
+		await act(async () => {
+			await result.current.handleSendFromInput("queued text");
+		});
+
+		expect(onSend).toHaveBeenCalledWith(
+			"queued text",
+			undefined,
+			undefined,
+			42,
+		);
 		unmount();
 	});
 

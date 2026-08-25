@@ -285,6 +285,10 @@ interface ChatPageInputProps {
 	// ID of the queued message being edited, when the active edit
 	// targets the queue instead of history.
 	editingQueuedMessageId?: number | null;
+	// True while the edit still targets a message that is queued. A
+	// promoted target keeps the edit open but behaves like a history
+	// edit.
+	isEditingQueuedMessage?: boolean;
 	// Called when the queued message being edited leaves the queue,
 	// for example because the worker promoted it.
 	onQueuedEditTargetDrained?: () => void;
@@ -352,6 +356,7 @@ export const ChatPageInput: FC<ChatPageInputProps> = ({
 	onContentChange,
 	isEditing,
 	editingQueuedMessageId = null,
+	isEditingQueuedMessage = false,
 	onQueuedEditTargetDrained,
 	onCancelEdit,
 	editingFileBlocks,
@@ -512,8 +517,9 @@ export const ChatPageInput: FC<ChatPageInputProps> = ({
 
 	// The queue drains independently of the composer: a queued message
 	// can be promoted while the user is editing it. Report that so the
-	// page can leave queued-edit mode instead of saving into a message
-	// that is no longer queued.
+	// page can retarget the edit at the promoted message. The target is
+	// resolved again on submit, because the promoted message is often
+	// observed after the queue update that removed it.
 	useEffect(() => {
 		if (editingQueuedMessageId === null) {
 			return;
@@ -596,7 +602,7 @@ export const ChatPageInput: FC<ChatPageInputProps> = ({
 			onPromoteQueuedMessage={onPromoteQueuedMessage}
 			onEditQueuedMessage={onEditQueuedMessage}
 			isEditingMessage={isEditing}
-			isEditingQueuedMessage={editingQueuedMessageId !== null}
+			isEditingQueuedMessage={isEditingQueuedMessage}
 			onCancelEdit={onCancelEdit}
 			userPromptHistory={userPromptHistory}
 			isDisabled={isInputDisabled}
