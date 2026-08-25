@@ -430,7 +430,7 @@ describe("setQueuedMessages", () => {
 		expect(store.getSnapshot().queuedMessages).toEqual([]);
 	});
 
-	it("does not notify when queued message IDs are unchanged", () => {
+	it("does not notify when queued messages are unchanged", () => {
 		const store = createChatStore();
 		const qm = makeQueuedMessage(10, "queued");
 		store.setQueuedMessages([qm]);
@@ -440,10 +440,28 @@ describe("setQueuedMessages", () => {
 			notified = true;
 		});
 
-		// Different object reference, same ID.
+		// Different object reference, same values.
 		store.setQueuedMessages([{ ...qm }]);
 
 		expect(notified).toBe(false);
+	});
+
+	it("applies in-place content edits that keep the ID and position", () => {
+		const store = createChatStore();
+		const qm = makeQueuedMessage(10, "queued");
+		store.setQueuedMessages([qm]);
+
+		let notified = false;
+		store.subscribe(() => {
+			notified = true;
+		});
+
+		store.setQueuedMessages([makeQueuedMessage(10, "queued edited")]);
+
+		expect(store.getSnapshot().queuedMessages[0].content).toEqual([
+			{ type: "text", text: "queued edited" },
+		]);
+		expect(notified).toBe(true);
 	});
 });
 
@@ -476,6 +494,17 @@ describe("suppressQueuedMessageID / applyAuthoritativeQueuedMessages", () => {
 		expect(
 			store.getSnapshot().queuedMessages.map((message) => message.id),
 		).toEqual([a.id, c.id]);
+	});
+
+	it("applies authoritative content edits that keep the ID and position", () => {
+		const store = createChatStore();
+		store.setQueuedMessages([makeQueuedMessage(1, "A")]);
+
+		store.applyAuthoritativeQueuedMessages([makeQueuedMessage(1, "A edited")]);
+
+		expect(store.getSnapshot().queuedMessages[0].content).toEqual([
+			{ type: "text", text: "A edited" },
+		]);
 	});
 
 	it("filters suppressed IDs from REST hydration via applyAuthoritativeQueuedMessages", () => {

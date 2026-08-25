@@ -6,6 +6,7 @@ import { API } from "#/api/api";
 import type * as TypesGen from "#/api/typesGenerated";
 import {
 	MockChatContextClean,
+	MockChatQueuedMessage,
 	MockMCPServerConfig,
 } from "#/testHelpers/chatEntities";
 import { MockWorkspace, MockWorkspaceAgent } from "#/testHelpers/entities";
@@ -396,6 +397,38 @@ export const Streaming: Story = {
 		initialValue: "",
 		onAttach: fn(),
 		onRemoveAttachment: fn(),
+	},
+};
+
+// Enter must save an in-progress edit even while a turn is streaming,
+// which is the normal state when a queued message exists.
+export const EnterSavesEditWhileStreaming: Story = {
+	args: {
+		isStreaming: true,
+		isEditingMessage: true,
+		onCancelEdit: fn(),
+		onInterrupt: fn(),
+		initialValue: "Edited queued message",
+		queuedMessages: [
+			{
+				...MockChatQueuedMessage,
+				id: 42,
+				content: [{ type: "text", text: "Edited queued message" }],
+			},
+		],
+		onPromoteQueuedMessage: fn(),
+		onDeleteQueuedMessage: fn(),
+		onAttach: fn(),
+		onRemoveAttachment: fn(),
+	},
+	play: async ({ args, canvasElement }) => {
+		const editor = getEditor(canvasElement);
+		await userEvent.click(editor);
+		await userEvent.keyboard("{Enter}");
+		await waitFor(() =>
+			expect(args.onSend).toHaveBeenCalledWith("Edited queued message"),
+		);
+		expect(args.onPromoteQueuedMessage).not.toHaveBeenCalled();
 	},
 };
 
