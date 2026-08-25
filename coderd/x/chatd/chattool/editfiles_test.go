@@ -51,6 +51,19 @@ func TestEditFiles(t *testing.T) {
 		assert.NotContains(t, editProps, "search", "schema should not expose deprecated search")
 		assert.NotContains(t, editProps, "replace", "schema should not expose deprecated replace")
 
+		// The model relies on per-field guidance; the descriptions
+		// live on workspacesdk.FileEdit and must survive into the
+		// generated schema.
+		oldTextProps, ok := editProps["old_text"].(map[string]any)
+		require.True(t, ok)
+		assert.Contains(t, oldTextProps["description"], "fuzzy")
+		newTextProps, ok := editProps["new_text"].(map[string]any)
+		require.True(t, ok)
+		assert.Contains(t, newTextProps["description"], "replaces old_text")
+		replaceAllProps, ok := editProps["replace_all"].(map[string]any)
+		require.True(t, ok)
+		assert.Contains(t, replaceAllProps["description"], "every match")
+
 		// Requiredness alone did not stop models from omitting path,
 		// so the schema must also describe it.
 		pathSchema, ok := props["path"].(map[string]any)
