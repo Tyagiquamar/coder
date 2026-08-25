@@ -7117,7 +7117,7 @@ func chatModelConfigRBACObject(config database.ChatModelConfig) rbac.Object {
 // @Tags Chats
 // @Produce json
 // @Param organization path string true "Organization name or ID"
-// @Param model path string true "Model ID"
+// @Param model path string true "Model ID" format(uuid)
 // @Success 200 {object} codersdk.ChatModel
 // @Router /api/v2/organizations/{organization}/chats/models/{model} [get]
 // @x-apidocgen {"skip": true}
@@ -7438,7 +7438,7 @@ func (api *API) createChatModelConfig(rw http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param organization path string true "Organization name or ID"
-// @Param model path string true "Model ID"
+// @Param model path string true "Model ID" format(uuid)
 // @Param request body codersdk.UpdateChatModelRequest true "Model updates"
 // @Success 200 {object} codersdk.ChatModel
 // @Router /api/v2/organizations/{organization}/chats/models/{model} [patch]
@@ -7692,7 +7692,7 @@ func (api *API) updateChatModelConfig(rw http.ResponseWriter, r *http.Request) {
 // @Security CoderSessionToken
 // @Tags Chats
 // @Param organization path string true "Organization name or ID"
-// @Param model path string true "Model ID"
+// @Param model path string true "Model ID" format(uuid)
 // @Success 204
 // @Router /api/v2/organizations/{organization}/chats/models/{model} [delete]
 // @x-apidocgen {"skip": true}
