@@ -1187,9 +1187,9 @@ func DefaultReadFileLinesLimits() ReadFileLinesLimits {
 // both in the first release after Coder Agents GA (2026-09)
 // (CODAGT-483).
 type FileEdit struct {
-	OldText    string `json:"old_text"`
-	NewText    string `json:"new_text"`
-	ReplaceAll bool   `json:"replace_all,omitempty"`
+	OldText    string `json:"old_text" description:"Existing text in the file to replace. Matching is fuzzy: whitespace and indentation differences are tolerated."`
+	NewText    string `json:"new_text" description:"Text that replaces old_text."`
+	ReplaceAll bool   `json:"replace_all,omitempty" description:"Replace every match of old_text instead of erroring when it matches more than once."`
 }
 
 // MarshalJSON emits both the current and the deprecated
