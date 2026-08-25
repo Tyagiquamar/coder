@@ -1300,8 +1300,8 @@ func TestHandleEditFiles_Failure_NoPathStoreUpdate(t *testing.T) {
 }
 
 // TestHandleEditFiles_DeprecatedFieldNames verifies the endpoint
-// applies FileEdit's deprecated-key fallback over the wire
-// (CODAGT-483). Case names mirror TestFileEdit_UnmarshalAcceptsDeprecatedKeys.
+// applies FileEdit's deprecated-key fallback over the wire.
+// Case names mirror TestFileEdit_UnmarshalAcceptsDeprecatedKeys.
 func TestHandleEditFiles_DeprecatedFieldNames(t *testing.T) {
 	t.Parallel()
 

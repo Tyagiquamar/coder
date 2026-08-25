@@ -1741,7 +1741,7 @@ func testTool[Arg, Ret any](t *testing.T, tool toolsdk.Tool[Arg, Ret], tb toolsd
 }
 
 // TestEditFileTools_DecodeDeprecatedKeys pins that deprecated-key
-// MCP args survive decoding into the typed edit args (CODAGT-483).
+// MCP args survive decoding into the typed edit args.
 func TestEditFileTools_DecodeDeprecatedKeys(t *testing.T) {
 	t.Parallel()
 

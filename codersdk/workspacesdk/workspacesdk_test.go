@@ -147,9 +147,9 @@ func (f *fakeResolver) LookupIP(_ context.Context, network, host string) ([]net.
 }
 
 // TestFileEdit_MarshalEmitsDeprecatedKeys pins the coderd->agent
-// wire compatibility (CODAGT-483): the request JSON must keep
-// carrying the pre-rename search/replace keys so running agents on
-// older versions decode edits while coderd upgrades first.
+// wire compatibility: the request JSON must keep carrying the
+// pre-rename search/replace keys so running agents on older versions
+// decode edits while coderd upgrades first.
 func TestFileEdit_MarshalEmitsDeprecatedKeys(t *testing.T) {
 	t.Parallel()
 
@@ -175,7 +175,7 @@ func TestFileEdit_MarshalEmitsDeprecatedKeys(t *testing.T) {
 }
 
 // TestFileEdit_UnmarshalAcceptsDeprecatedKeys pins the decode side
-// of FileEdit's deprecated-key fallback (CODAGT-483).
+// of FileEdit's deprecated-key fallback.
 func TestFileEdit_UnmarshalAcceptsDeprecatedKeys(t *testing.T) {
 	t.Parallel()
 

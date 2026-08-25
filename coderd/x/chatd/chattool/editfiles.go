@@ -24,37 +24,16 @@ type EditFilesArgs struct {
 }
 
 type editFileEdits struct {
-	Path  string         `json:"path" description:"The absolute path of the file to edit, for example /home/coder/project/main.go."`
-	Edits []editFileEdit `json:"edits" description:"Edits that replace old text with new text, applied to this file in order."`
-}
-
-// editFileEdit uses "old_text"/"new_text" instead of "search"/"replace"
-// because models confused the direction (CODAGT-312).
-//
-// This type must not be replaced by workspacesdk.FileEdit, whose
-// UnmarshalJSON accepts the deprecated search/replace keys for wire
-// compatibility: doing so would silently reopen deprecated-key
-// acceptance at the chat ingress.
-type editFileEdit struct {
-	OldText    string `json:"old_text" description:"Existing text in the file to replace. Matching is fuzzy: whitespace and indentation differences are tolerated."`
-	NewText    string `json:"new_text" description:"Text that replaces old_text."`
-	ReplaceAll bool   `json:"replace_all,omitempty" description:"Replace every match of old_text instead of erroring when it matches more than once."`
+	Path  string                  `json:"path" description:"The absolute path of the file to edit, for example /home/coder/project/main.go."`
+	Edits []workspacesdk.FileEdit `json:"edits" description:"Edits that replace old text with new text, applied to this file in order."`
 }
 
 func (a EditFilesArgs) toSDKFiles() []workspacesdk.FileEdits {
 	files := make([]workspacesdk.FileEdits, len(a.Files))
 	for i, f := range a.Files {
-		edits := make([]workspacesdk.FileEdit, len(f.Edits))
-		for j, e := range f.Edits {
-			edits[j] = workspacesdk.FileEdit{
-				OldText:    e.OldText,
-				NewText:    e.NewText,
-				ReplaceAll: e.ReplaceAll,
-			}
-		}
 		files[i] = workspacesdk.FileEdits{
 			Path:  f.Path,
-			Edits: edits,
+			Edits: f.Edits,
 		}
 	}
 	return files

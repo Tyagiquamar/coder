@@ -377,7 +377,7 @@ func (api *API) HandleEditFiles(rw http.ResponseWriter, r *http.Request) {
 
 	// workspacesdk.FileEdit.UnmarshalJSON applies the deprecated
 	// search/replace fallback, so the wire types decode old-coderd
-	// requests directly (CODAGT-483).
+	// requests directly.
 	var req workspacesdk.FileEditRequest
 	if !httpapi.Read(ctx, rw, r, &req) {
 		return
