@@ -2865,7 +2865,7 @@ func (api *API) patchChatMessage(rw http.ResponseWriter, r *http.Request) {
 // @ID delete-chat-queued-message
 // @Security CoderSessionToken
 // @Tags Chats
-// @Param chat path string true "Chat ID"
+// @Param chat path string true "Chat ID" format(uuid)
 // @Param queuedMessage path int true "Queued message ID"
 // @Success 204
 // @Router /api/v2/chats/{chat}/queue/{queuedMessage} [delete]
@@ -2925,7 +2925,7 @@ func (api *API) deleteChatQueuedMessage(rw http.ResponseWriter, r *http.Request)
 // @ID promote-chat-queued-message
 // @Security CoderSessionToken
 // @Tags Chats
-// @Param chat path string true "Chat ID"
+// @Param chat path string true "Chat ID" format(uuid)
 // @Param queuedMessage path int true "Queued message ID"
 // @Produce json
 // @Success 202 {object} codersdk.Response
@@ -3413,7 +3413,7 @@ func (api *API) regenerateChatTitle(rw http.ResponseWriter, r *http.Request) {
 // @ID propose-chat-title
 // @Security CoderSessionToken
 // @Tags Chats
-// @Param chat path string true "Chat ID"
+// @Param chat path string true "Chat ID" format(uuid)
 // @Produce json
 // @Success 200 {object} codersdk.ProposeChatTitleResponse
 // @Router /api/v2/chats/{chat}/title/propose [post]
@@ -5989,7 +5989,7 @@ func (api *API) getUserChatCompactionThresholds(rw http.ResponseWriter, r *http.
 // @ID update-user-chat-compaction-threshold
 // @Security CoderSessionToken
 // @Tags Chats
-// @Param modelConfig path string true "Model config ID"
+// @Param modelConfig path string true "Model config ID" format(uuid)
 // @Accept json
 // @Param request body codersdk.UpdateUserChatCompactionThresholdRequest true "Request body"
 // @Produce json
@@ -6070,7 +6070,7 @@ func (api *API) putUserChatCompactionThreshold(rw http.ResponseWriter, r *http.R
 // @ID delete-user-chat-compaction-threshold
 // @Security CoderSessionToken
 // @Tags Chats
-// @Param modelConfig path string true "Model config ID"
+// @Param modelConfig path string true "Model config ID" format(uuid)
 // @Success 204
 // @Router /api/v2/chats/config/user-compaction-thresholds/{modelConfig} [delete]
 // @x-apidocgen {"skip": true}
@@ -6716,7 +6716,7 @@ func (api *API) listUserAIProviderKeyConfigs(rw http.ResponseWriter, r *http.Req
 // @Security CoderSessionToken
 // @Tags Chats
 // @Param user path string true "User ID, username, or me"
-// @Param aiProvider path string true "AI provider ID"
+// @Param aiProvider path string true "AI provider ID" format(uuid)
 // @Accept json
 // @Param request body codersdk.CreateUserAIProviderKeyRequest true "Request body"
 // @Produce json
@@ -6803,7 +6803,7 @@ func (api *API) upsertUserAIProviderKey(rw http.ResponseWriter, r *http.Request)
 // @Security CoderSessionToken
 // @Tags Chats
 // @Param user path string true "User ID, username, or me"
-// @Param aiProvider path string true "AI provider ID"
+// @Param aiProvider path string true "AI provider ID" format(uuid)
 // @Success 204
 // @Router /api/v2/users/{user}/ai-provider-keys/{aiProvider} [delete]
 func (api *API) deleteUserAIProviderKey(rw http.ResponseWriter, r *http.Request) {
@@ -8080,7 +8080,7 @@ func ChatProviderAPIKeysFromDeploymentValues(
 // @ID submit-chat-tool-results
 // @Security CoderSessionToken
 // @Tags Chats
-// @Param chat path string true "Chat ID"
+// @Param chat path string true "Chat ID" format(uuid)
 // @Accept json
 // @Param request body codersdk.SubmitToolResultsRequest true "Request body"
 // @Success 204
