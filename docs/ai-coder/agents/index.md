@@ -239,7 +239,7 @@ tasks:
 | `ask_user_question`                         | Ask the user structured clarification questions during plan mode                                   |
 | `read_file`                                 | Read file contents from the workspace                                                              |
 | `write_file`                                | Write a file to the workspace                                                                      |
-| `edit_files`                                | Replace old_text with new_text across files                                                        |
+| `edit_files`                                | Replace `old_text` with `new_text` across files                                                    |
 | `execute`                                   | Run shell commands in the workspace                                                                |
 | `process_output`                            | Retrieve output from a background process                                                          |
 | `process_list`                              | List all tracked processes in the workspace                                                        |

@@ -1199,6 +1199,33 @@ func (e FileEdit) MarshalJSON() ([]byte, error) {
 	}{wire: wire(e), Search: e.OldText, Replace: e.NewText})
 }
 
+// UnmarshalJSON accepts the deprecated "search"/"replace" keys so
+// callers that predate the rename keep working: MCP clients using a
+// cached schema for coder_workspace_edit_file(s), which advertised
+// the old keys, and old-coderd callers of the agent /edit-files
+// endpoint (CODAGT-483). The fallback applies only when both new
+// fields are empty, which identifies an old-wire caller; if either
+// new field is set, an explicitly empty value (e.g. new_text=""
+// for a deletion) is preserved. Remove once every caller sends
+// "old_text"/"new_text".
+func (e *FileEdit) UnmarshalJSON(data []byte) error {
+	type wire FileEdit
+	var w struct {
+		wire
+		Search  string `json:"search"`
+		Replace string `json:"replace"`
+	}
+	if err := json.Unmarshal(data, &w); err != nil {
+		return err
+	}
+	*e = FileEdit(w.wire)
+	if e.OldText == "" && e.NewText == "" {
+		e.OldText = w.Search
+		e.NewText = w.Replace
+	}
+	return nil
+}
+
 type FileEdits struct {
 	Path  string     `json:"path"`
 	Edits []FileEdit `json:"edits"`

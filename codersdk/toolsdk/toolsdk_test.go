@@ -1740,6 +1740,28 @@ func testTool[Arg, Ret any](t *testing.T, tool toolsdk.Tool[Arg, Ret], tb toolsd
 	return ret, err
 }
 
+// TestEditFileTools_DecodeDeprecatedKeys pins the MCP decode side of
+// the rename compatibility (CODAGT-483): coder_workspace_edit_file(s)
+// advertised search/replace until this change, so an MCP client holding
+// a cached schema from before the upgrade still sends those keys.
+// Tool.Generic decodes the raw arguments into the typed args, and the
+// values must survive into FileEdit instead of being discarded.
+func TestEditFileTools_DecodeDeprecatedKeys(t *testing.T) {
+	t.Parallel()
+
+	var single toolsdk.WorkspaceEditFileArgs
+	require.NoError(t, json.Unmarshal([]byte(
+		`{"workspace":"w","path":"/p","edits":[{"search":"foo","replace":"bar"}]}`), &single))
+	require.Equal(t, "foo", single.Edits[0].OldText)
+	require.Equal(t, "bar", single.Edits[0].NewText)
+
+	var multi toolsdk.WorkspaceEditFilesArgs
+	require.NoError(t, json.Unmarshal([]byte(
+		`{"workspace":"w","files":[{"path":"/p","edits":[{"search":"foo","replace":"bar"}]}]}`), &multi))
+	require.Equal(t, "foo", multi.Files[0].Edits[0].OldText)
+	require.Equal(t, "bar", multi.Files[0].Edits[0].NewText)
+}
+
 func TestWithRecovery(t *testing.T) {
 	t.Parallel()
 	t.Run("OK", func(t *testing.T) {

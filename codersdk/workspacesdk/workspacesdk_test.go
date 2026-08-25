@@ -175,3 +175,51 @@ func TestFileEdit_MarshalEmitsDeprecatedKeys(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &round))
 	require.Equal(t, edit, round)
 }
+
+// TestFileEdit_UnmarshalAcceptsDeprecatedKeys pins the decode side
+// of the rename compatibility (CODAGT-483): callers still sending the
+// pre-rename search/replace keys keep working. The affected callers
+// are MCP clients with a cached schema for coder_workspace_edit_file(s)
+// (which advertised the old keys) and old-coderd versions calling the
+// agent /edit-files endpoint. The fallback applies only when both new
+// fields are empty, so an explicitly empty new_text deletion is never
+// overwritten.
+func TestFileEdit_UnmarshalAcceptsDeprecatedKeys(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		in   string
+		want workspacesdk.FileEdit
+	}{
+		{
+			name: "OldKeysOnly",
+			in:   `{"search":"old","replace":"new"}`,
+			want: workspacesdk.FileEdit{OldText: "old", NewText: "new"},
+		},
+		{
+			name: "OldKeysWithReplaceAll",
+			in:   `{"search":"old","replace":"new","replace_all":true}`,
+			want: workspacesdk.FileEdit{OldText: "old", NewText: "new", ReplaceAll: true},
+		},
+		{
+			name: "NewKeysWinWhenSet",
+			in:   `{"old_text":"o","new_text":"n","search":"old","replace":"legacy"}`,
+			want: workspacesdk.FileEdit{OldText: "o", NewText: "n"},
+		},
+		{
+			name: "ExplicitEmptyNewTextPreserved",
+			in:   `{"old_text":"o","new_text":"","search":"old","replace":"legacy"}`,
+			want: workspacesdk.FileEdit{OldText: "o", NewText: ""},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var got workspacesdk.FileEdit
+			require.NoError(t, json.Unmarshal([]byte(tt.in), &got))
+			require.Equal(t, tt.want, got)
+		})
+	}
+}

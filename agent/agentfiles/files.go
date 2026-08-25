@@ -372,58 +372,15 @@ func (api *API) writeFile(ctx context.Context, r *http.Request, path string) (HT
 	return api.atomicWrite(ctx, path, mode, r.Body)
 }
 
-// rawFileEdit embeds the wire types and adds the deprecated
-// "search"/"replace" keys so older coderd versions still on the
-// pre-rename wire format keep working during rollout (CODAGT-483).
-// Remove the fallback once every deployed coderd sends
-// "old_text"/"new_text".
-type rawFileEdit struct {
-	workspacesdk.FileEdit
-	Search  string `json:"search"`
-	Replace string `json:"replace"`
-}
-
-type rawFileEdits struct {
-	workspacesdk.FileEdits
-	Edits []rawFileEdit `json:"edits"`
-}
-
-type rawFileEditRequest struct {
-	workspacesdk.FileEditRequest
-	Files []rawFileEdits `json:"files"`
-}
-
 func (api *API) HandleEditFiles(rw http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	var raw rawFileEditRequest
-	if !httpapi.Read(ctx, rw, r, &raw) {
+	// workspacesdk.FileEdit.UnmarshalJSON applies the deprecated
+	// search/replace fallback, so the wire types decode old-coderd
+	// requests directly (CODAGT-483).
+	var req workspacesdk.FileEditRequest
+	if !httpapi.Read(ctx, rw, r, &req) {
 		return
-	}
-
-	req := raw.FileEditRequest
-	req.Files = nil
-	for _, f := range raw.Files {
-		file := f.FileEdits
-		file.Edits = nil
-		for _, e := range f.Edits {
-			// Fall back to the deprecated keys only when both new
-			// fields are empty, which identifies an old-coderd
-			// caller still on the pre-rename wire format. If
-			// either new field is set, the request uses the new
-			// wire format and the deprecated keys must not
-			// override it, including an explicitly empty new_text
-			// that deletes the matched text. There is no valid
-			// edit where both new fields are empty and the
-			// deprecated keys should be ignored: an empty
-			// old_text is rejected downstream either way.
-			if e.OldText == "" && e.NewText == "" {
-				e.OldText = e.Search
-				e.NewText = e.Replace
-			}
-			file.Edits = append(file.Edits, e.FileEdit)
-		}
-		req.Files = append(req.Files, file)
 	}
 
 	if len(req.Files) == 0 {
