@@ -3,7 +3,7 @@ import {
 	CornerDownLeftIcon,
 	ImageIcon,
 	InfoIcon,
-	SquarePenIcon,
+	PencilIcon,
 	Trash2Icon,
 } from "lucide-react";
 import { type FC, useEffect, useState } from "react";
@@ -282,7 +282,7 @@ export const QueuedMessagesList: FC<QueuedMessagesListProps> = ({
 												onClick={() => onEdit(item.id)}
 												className="size-6 rounded text-content-secondary hover:bg-surface-tertiary hover:text-content-primary"
 											>
-												<SquarePenIcon className="size-3.5" />
+												<PencilIcon className="size-3.5" />
 											</Button>
 										</TooltipTrigger>
 										<TooltipContent side="top">Edit</TooltipContent>
