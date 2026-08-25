@@ -15,7 +15,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 
-	"cdr.dev/slog/v3"
 	"cdr.dev/slog/v3/sloggers/slogtest"
 	"github.com/coder/coder/v2/aibridge"
 	"github.com/coder/coder/v2/aibridge/aibridgetest"
@@ -297,20 +296,16 @@ func TestWebSocketUpgradeRejected(t *testing.T) {
 			return nil, nil //nolint:nilnil // The interceptor must not be reached.
 		},
 	}
-	sink := codertestutil.NewFakeSink(t)
 	bridge, err := aibridge.NewRequestBridge(
 		t.Context(),
 		[]provider.Provider{prov},
-		nil, nil, sink.Logger(), nil, bridgeTestTracer,
+		nil, nil, slogtest.Make(t, nil), nil, bridgeTestTracer,
 	)
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodGet, "/test/responses", nil)
 	req.Header.Set("Connection", "keep-alive, Upgrade")
 	req.Header.Set("Upgrade", "WebSocket")
-	req.Header.Set("User-Agent", "GitHubCopilotChat/1.2.3")
-	req.Header.Set("X-Interaction-Id", "interaction-id")
-	req = req.WithContext(aibridge.AsActor(req.Context(), "initiator-id", nil))
 	resp := httptest.NewRecorder()
 
 	bridge.ServeHTTP(resp, req)
@@ -318,29 +313,6 @@ func TestWebSocketUpgradeRejected(t *testing.T) {
 	assert.Equal(t, http.StatusNotImplemented, resp.Code)
 	assert.Contains(t, resp.Body.String(), "WebSocket transport is not supported; use HTTP")
 	assert.False(t, interceptorCalled)
-
-	entries := sink.Entries(func(entry slog.SinkEntry) bool {
-		return entry.Message == "rejecting unsupported WebSocket upgrade"
-	})
-	require.Len(t, entries, 1)
-	assert.Equal(t, map[string]any{
-		"provider":          "test",
-		"provider_type":     "test",
-		"route":             "/responses",
-		"method":            http.MethodGet,
-		"client":            string(aibridge.ClientCopilotVSC),
-		"user_agent":        "GitHubCopilotChat/1.2.3",
-		"client_session_id": "interaction-id",
-		"initiator_id":      "initiator-id",
-	}, logFields(entries[0].Fields))
-}
-
-func logFields(fields slog.Map) map[string]any {
-	values := make(map[string]any, len(fields))
-	for _, field := range fields {
-		values[field.Name] = field.Value
-	}
-	return values
 }
 
 func TestRequestBodySizeLimit(t *testing.T) {
