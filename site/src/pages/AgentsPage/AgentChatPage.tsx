@@ -142,6 +142,16 @@ const AGENT_BINDING_REPAIR_POLL_MS = 30_000;
 
 class CompactCommandPendingError extends Error {}
 
+// Raised when a queued-message edit cannot be saved because the target
+// left the queue. The composer keeps the typed text and exits edit mode
+// instead of surfacing a failed request.
+class QueuedEditTargetDrainedError extends Error {}
+
+// Shown when the queued message being edited was promoted before the
+// edit could be saved.
+const queuedEditTargetDrainedMessage =
+	"That message was already sent, so your edit was not saved. The text is still in the composer.";
+
 /** @internal Exported for testing. */
 export const draftInputStorageKeyPrefix = "agents.draft-input.";
 
@@ -642,9 +652,24 @@ export function useConversationEditingState(deps: {
 		setEditingFileBlocks([]);
 	};
 
+	// Leaves queued-edit mode without restoring the pre-edit draft: the
+	// text the user typed stays in the composer so it can be sent as a
+	// new message.
+	const handleQueuedEditTargetDrained = () => {
+		if (editingQueuedMessageId === null) {
+			return;
+		}
+		setEditingQueuedMessageId(null);
+		setDraftBeforeEdit(null);
+		setEditingFileBlocks([]);
+		toast.info(queuedEditTargetDrainedMessage);
+	};
+
 	// Clears the composer for an in-flight history edit and
 	// returns a rollback function that restores the editing draft
-	// if the send fails.
+	// if the send fails. Callers that must not re-enter edit mode,
+	// such as a queued target that left the queue, pass
+	// resumeEditing: false to restore only the text.
 	const clearInputForEdit = (message: string) => {
 		const snapshot = {
 			editorState: serializedEditorStateRef.current,
@@ -658,7 +683,7 @@ export function useConversationEditingState(deps: {
 		setEditingMessageId(null);
 		setEditingQueuedMessageId(null);
 
-		return () => {
+		return ({ resumeEditing = true }: { resumeEditing?: boolean } = {}) => {
 			setDraftState({
 				editorInitialValue: message,
 				initialEditorState: snapshot.editorState,
@@ -666,6 +691,11 @@ export function useConversationEditingState(deps: {
 			serializedEditorStateRef.current = snapshot.editorState;
 			setRemountKey((k) => k + 1);
 			inputValueRef.current = message;
+			if (!resumeEditing) {
+				setDraftBeforeEdit(null);
+				setEditingFileBlocks([]);
+				return;
+			}
 			setEditingMessageId(snapshot.messageId);
 			setEditingQueuedMessageId(snapshot.queuedMessageId);
 			setEditingFileBlocks(snapshot.fileBlocks);
@@ -715,6 +745,10 @@ export function useConversationEditingState(deps: {
 			await sendPromise;
 		} catch (error) {
 			if (error instanceof CompactCommandPendingError) {
+				return;
+			}
+			if (error instanceof QueuedEditTargetDrainedError) {
+				rollback?.({ resumeEditing: false });
 				return;
 			}
 			rollback?.();
@@ -778,6 +812,7 @@ export function useConversationEditingState(deps: {
 		editingFileBlocks,
 		handleEditUserMessage,
 		handleEditQueuedMessage,
+		handleQueuedEditTargetDrained,
 		handleCancelEdit,
 		handleSendFromInput,
 		handleContentChange,
@@ -1751,6 +1786,18 @@ const AgentChatPage: FC = () => {
 		// The message keeps its queue position and stays queued, so no
 		// turn is started and chat status is untouched.
 		if (editedQueuedMessageID !== undefined) {
+			// The worker can promote the target between loading it into
+			// the composer and saving, which would make the request fail
+			// against a drained queue.
+			const stillQueued = store
+				.getSnapshot()
+				.queuedMessages.some(
+					(queuedMessage) => queuedMessage.id === editedQueuedMessageID,
+				);
+			if (!stillQueued) {
+				toast.info(queuedEditTargetDrainedMessage);
+				throw new QueuedEditTargetDrainedError();
+			}
 			let response: Awaited<ReturnType<typeof updateQueuedMessage>>;
 			try {
 				response = await updateQueuedMessage({
@@ -1758,6 +1805,12 @@ const AgentChatPage: FC = () => {
 					req: { content },
 				});
 			} catch (error) {
+				// A 409 means the queue drained after the check above. That
+				// is the same race, not a chat error worth persisting.
+				if (isApiError(error) && error.response?.status === 409) {
+					toast.info(queuedEditTargetDrainedMessage);
+					throw new QueuedEditTargetDrainedError();
+				}
 				handleRequestError(error);
 				throw error;
 			}

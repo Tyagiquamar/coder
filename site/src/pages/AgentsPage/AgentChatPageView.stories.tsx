@@ -89,6 +89,7 @@ const buildEditing = (
 	handleEditUserMessage: fn(),
 	handleEditQueuedMessage: fn(),
 	handleCancelEdit: fn(),
+	handleQueuedEditTargetDrained: fn(),
 	handleSendFromInput: fn(),
 	handleContentChange: fn(),
 	...overrides,

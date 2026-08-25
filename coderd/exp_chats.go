@@ -3040,9 +3040,11 @@ func (api *API) patchChatQueuedMessage(rw http.ResponseWriter, r *http.Request) 
 		case writeChatInvalidState(ctx, rw, updateErr):
 			// response already written
 		case errors.Is(updateErr, chatstate.ErrTransitionNotAllowed):
+			// The queue drains asynchronously, so a message can be promoted
+			// between loading it into the composer and saving the edit. Report
+			// that outcome instead of the raw state machine error.
 			httpapi.Write(ctx, rw, http.StatusConflict, codersdk.Response{
-				Message: "Chat has no queued messages to edit.",
-				Detail:  updateErr.Error(),
+				Message: "This message is no longer queued. It may have already been sent.",
 			})
 		default:
 			httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{

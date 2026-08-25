@@ -98,6 +98,7 @@ interface EditingState {
 		fileBlocks?: readonly ChatMessagePart[],
 	) => void;
 	handleCancelEdit: () => void;
+	handleQueuedEditTargetDrained: () => void;
 	handleSendFromInput: (
 		message: string,
 		attachments?: readonly PendingAttachment[],
@@ -1038,6 +1039,10 @@ export const AgentChatPageView: FC<AgentChatPageViewProps> = ({
 								remountKey={editing.remountKey}
 								onContentChange={editing.handleContentChange}
 								isEditing={isEditing}
+								editingQueuedMessageId={editing.editingQueuedMessageId}
+								onQueuedEditTargetDrained={
+									editing.handleQueuedEditTargetDrained
+								}
 								onCancelEdit={editing.handleCancelEdit}
 								editingFileBlocks={editing.editingFileBlocks}
 								mcpServers={mcpServers}

@@ -540,6 +540,27 @@ func TestTransitionInputValidation(t *testing.T) {
 	})
 }
 
+// Editing a queued message must be legal from exactly the states that
+// allow deleting one: both target an existing queued row without
+// changing the queue length, so any state that can hold a queued
+// message can edit it. States named without a queue (W, E0, R0, I0,
+// A0) cannot reach either transition by definition.
+func TestQueuedMessageEditAllowedWhereDeleteIs(t *testing.T) {
+	t.Parallel()
+
+	deleteStates := chatstate.AllowedInputStates(chatstate.TransitionDeleteQueuedMessage)
+	updateStates := chatstate.AllowedInputStates(chatstate.TransitionUpdateQueuedMessage)
+	require.Equal(t, deleteStates, updateStates)
+
+	for _, state := range chatstate.AllExecutionStates {
+		if !state.QueueNonEmpty() || state.IsArchived() {
+			require.NotContains(t, updateStates, state)
+			continue
+		}
+		require.Contains(t, updateStates, state)
+	}
+}
+
 // TestSendMessageQueueCapRejectsQueueAppend seeds a chat with the
 // maximum queued messages and asserts that the next SendMessage in
 // a queue-appending state returns chatstate.ErrMessageQueueFull and

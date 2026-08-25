@@ -3557,6 +3557,49 @@ export const EnterSavesQueuedMessageEdit: Story = {
 	},
 };
 
+// The worker can promote the message being edited. The composer must
+// leave queued-edit mode instead of saving into a drained queue.
+export const QueuedEditTargetPromotedWhileEditing: Story = {
+	parameters: {
+		queries: buildQueries(queuedEditChat, queuedEditMessages, {
+			diffUrl: undefined,
+		}),
+	},
+	beforeEach: () => {
+		spyOn(API.experimental, "getUserSkills").mockResolvedValue([]);
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		const updateSpy = spyOn(API.experimental, "updateChatQueuedMessage");
+		spyOn(API.experimental, "promoteChatQueuedMessage").mockResolvedValue(
+			undefined,
+		);
+		spyOn(API.experimental, "getChatMessages").mockResolvedValue({
+			...queuedEditMessages,
+			queued_messages: [],
+		});
+
+		await userEvent.click(
+			await canvas.findByRole("button", { name: "Edit queued message" }),
+		);
+		const editor = await canvas.findByTestId("chat-message-input");
+		await waitFor(() => expect(editor).toHaveTextContent("Queued prompt"));
+		expect(canvas.getByText(/Editing a queued message\./)).toBeVisible();
+
+		await userEvent.click(canvas.getByRole("button", { name: "Send now" }));
+
+		// Edit mode ends once the target leaves the queue, and the typed
+		// text stays in the composer.
+		await waitFor(() =>
+			expect(
+				canvas.queryByText(/Editing a queued message\./),
+			).not.toBeInTheDocument(),
+		);
+		expect(editor).toHaveTextContent("Queued prompt");
+		expect(updateSpy).not.toHaveBeenCalled();
+	},
+};
+
 const switchedChat: TypesGen.Chat = {
 	id: SWITCHED_CHAT_ID,
 	...baseChatFields,

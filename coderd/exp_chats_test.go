@@ -12396,7 +12396,57 @@ func TestUpdateChatQueuedMessage(t *testing.T) {
 				Text: "edited",
 			}},
 		})
-		requireSDKError(t, err, http.StatusConflict)
+		sdkErr := requireSDKError(t, err, http.StatusConflict)
+		require.Equal(t, "This message is no longer queued. It may have already been sent.", sdkErr.Message)
+		require.Empty(t, sdkErr.Detail)
+	})
+
+	// The queue can drain while the message sits in the composer: the
+	// worker promotes it, the turn finishes, and the chat lands in the
+	// waiting state with an empty queue.
+	t.Run("PromotedWhileEditingReturnsConflict", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := testutil.Context(t, testutil.WaitLong)
+		client, db := newChatClientWithDatabase(t)
+		user := coderdtest.CreateFirstUser(t, client.Client)
+		modelConfig := createChatModel(t, client)
+
+		chat := dbgen.Chat(t, db, database.Chat{
+			OrganizationID:    user.OrganizationID,
+			OwnerID:           user.UserID,
+			LastModelConfigID: modelConfig.ID,
+			Title:             "update queued drained",
+			Status:            database.ChatStatusError,
+		})
+
+		queuedContent, err := json.Marshal([]codersdk.ChatMessagePart{
+			codersdk.ChatMessageText("queued"),
+		})
+		require.NoError(t, err)
+		queued := insertTestChatQueuedMessage(ctx, t, db, chat.ID, queuedContent, modelConfig.ID)
+
+		// Drain the queue and settle the chat, mirroring a promotion that
+		// completes while the user is still editing.
+		require.NoError(t, db.DeleteChatQueuedMessage(dbauthz.AsSystemRestricted(ctx), database.DeleteChatQueuedMessageParams{
+			ID:     queued.ID,
+			ChatID: chat.ID,
+		}))
+		_, err = db.UpdateChatStatus(dbauthz.AsSystemRestricted(ctx), database.UpdateChatStatusParams{
+			ID:     chat.ID,
+			Status: database.ChatStatusWaiting,
+		})
+		require.NoError(t, err)
+
+		_, err = client.UpdateChatQueuedMessage(ctx, chat.ID, queued.ID, codersdk.UpdateChatQueuedMessageRequest{
+			Content: []codersdk.ChatInputPart{{
+				Type: codersdk.ChatInputPartTypeText,
+				Text: "edited",
+			}},
+		})
+		sdkErr := requireSDKError(t, err, http.StatusConflict)
+		require.Equal(t, "This message is no longer queued. It may have already been sent.", sdkErr.Message)
+		require.NotContains(t, sdkErr.Detail, "UpdateQueuedMessage")
 	})
 
 	t.Run("InvalidQueuedMessageID", func(t *testing.T) {

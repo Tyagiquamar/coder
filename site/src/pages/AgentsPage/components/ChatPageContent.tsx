@@ -282,6 +282,12 @@ interface ChatPageInputProps {
 		hasFileReferences: boolean,
 	) => void;
 	isEditing: boolean;
+	// ID of the queued message being edited, when the active edit
+	// targets the queue instead of history.
+	editingQueuedMessageId?: number | null;
+	// Called when the queued message being edited leaves the queue,
+	// for example because the worker promoted it.
+	onQueuedEditTargetDrained?: () => void;
 	onCancelEdit: () => void;
 	// File parts from the message being edited, converted to
 	// File objects and pre-populated into attachments.
@@ -345,6 +351,8 @@ export const ChatPageInput: FC<ChatPageInputProps> = ({
 	remountKey,
 	onContentChange,
 	isEditing,
+	editingQueuedMessageId = null,
+	onQueuedEditTargetDrained,
 	onCancelEdit,
 	editingFileBlocks,
 	mcpServers,
@@ -502,6 +510,23 @@ export const ChatPageInput: FC<ChatPageInputProps> = ({
 		wasEditingRef.current = isEditing;
 	}, [isEditing, resetEditAttachments]);
 
+	// The queue drains independently of the composer: a queued message
+	// can be promoted while the user is editing it. Report that so the
+	// page can leave queued-edit mode instead of saving into a message
+	// that is no longer queued.
+	useEffect(() => {
+		if (editingQueuedMessageId === null) {
+			return;
+		}
+		const stillQueued = queuedMessages.some(
+			(message) => message.id === editingQueuedMessageId,
+		);
+		if (stillQueued) {
+			return;
+		}
+		onQueuedEditTargetDrained?.();
+	}, [editingQueuedMessageId, queuedMessages, onQueuedEditTargetDrained]);
+
 	const isStreaming =
 		hasStreamState || chatStatus === "running" || chatStatus === "interrupting";
 
@@ -571,6 +596,7 @@ export const ChatPageInput: FC<ChatPageInputProps> = ({
 			onPromoteQueuedMessage={onPromoteQueuedMessage}
 			onEditQueuedMessage={onEditQueuedMessage}
 			isEditingMessage={isEditing}
+			isEditingQueuedMessage={editingQueuedMessageId !== null}
 			onCancelEdit={onCancelEdit}
 			userPromptHistory={userPromptHistory}
 			isDisabled={isInputDisabled}

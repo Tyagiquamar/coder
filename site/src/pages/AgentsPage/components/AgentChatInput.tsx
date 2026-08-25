@@ -156,6 +156,9 @@ interface AgentChatInputProps {
 	onEditQueuedMessage?: (id: number) => void;
 	// History editing state, owned by the parent.
 	isEditingMessage?: boolean;
+	// Editing a queued message keeps it queued, so the composer shows
+	// different guidance than a history edit.
+	isEditingQueuedMessage?: boolean;
 	onCancelEdit?: () => void;
 	// Newest-first list of non-empty user prompts for local history cycling.
 	userPromptHistory?: readonly string[];
@@ -379,6 +382,7 @@ export const AgentChatInput: FC<AgentChatInputProps> = ({
 	onPromoteQueuedMessage,
 	onEditQueuedMessage,
 	isEditingMessage = false,
+	isEditingQueuedMessage = false,
 	onCancelEdit,
 	userPromptHistory = [],
 	contextUsage,
@@ -1112,8 +1116,9 @@ export const AgentChatInput: FC<AgentChatInputProps> = ({
 					<div className="flex items-center justify-between border-b border-border-default/70 px-3 py-1.5">
 						<span className="flex items-center gap-1.5 text-xs font-medium text-content-warning">
 							<PencilIcon className="size-3.5" />
-							Editing will delete all subsequent messages and restart the
-							conversation here.
+							{isEditingQueuedMessage
+								? "Editing a queued message. It will stay queued in the same position."
+								: "Editing will delete all subsequent messages and restart the conversation here."}
 						</span>
 						<Button
 							type="button"

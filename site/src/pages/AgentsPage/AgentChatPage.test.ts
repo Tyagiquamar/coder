@@ -865,6 +865,26 @@ describe("useConversationEditingState", () => {
 		unmount();
 	});
 
+	it("leaves queued edit mode and keeps the typed text when the target is drained", () => {
+		const { result, unmount } = renderEditing();
+
+		act(() => {
+			result.current.handleContentChange("live draft", "{}", false);
+		});
+		act(() => {
+			result.current.handleEditQueuedMessage(42, "queued text");
+		});
+		act(() => {
+			result.current.handleQueuedEditTargetDrained();
+		});
+
+		expect(result.current.editingQueuedMessageId).toBeNull();
+		// The pre-edit draft is not restored: the edited text stays so it
+		// can be sent as a new message.
+		expect(result.current.editorInitialValue).toBe("queued text");
+		unmount();
+	});
+
 	it("restores the pre-edit draft when a queued edit is canceled", () => {
 		const { result, unmount } = renderEditing();
 

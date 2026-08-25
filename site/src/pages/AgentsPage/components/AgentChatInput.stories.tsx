@@ -432,6 +432,35 @@ export const EnterSavesEditWhileStreaming: Story = {
 	},
 };
 
+// Editing a queued message keeps it queued, so the history warning
+// about deleting later messages must not appear.
+export const EditingQueuedMessageBanner: Story = {
+	args: {
+		isEditingMessage: true,
+		isEditingQueuedMessage: true,
+		onCancelEdit: fn(),
+		initialValue: "Queued prompt",
+		queuedMessages: [
+			{
+				...MockChatQueuedMessage,
+				id: 42,
+				content: [{ type: "text", text: "Queued prompt" }],
+			},
+		],
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		expect(
+			canvas.getByText(
+				"Editing a queued message. It will stay queued in the same position.",
+			),
+		).toBeVisible();
+		expect(
+			canvas.queryByText(/delete all subsequent messages/),
+		).not.toBeInTheDocument();
+	},
+};
+
 // While editing (for example a queued message), the primary button
 // saves the edit instead of stopping the active turn.
 export const StreamingWhileEditing: Story = {
