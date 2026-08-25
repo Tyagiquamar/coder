@@ -189,11 +189,12 @@ func TestPassthroughRoutesForProviders(t *testing.T) {
 
 	upstreamRespBody := "upstream response"
 	tests := []struct {
-		name        string
-		baseURLPath string
-		requestPath string
-		provider    func(*testing.T, string) provider.Provider
-		expectPath  string
+		name          string
+		baseURLPath   string
+		requestMethod string
+		requestPath   string
+		provider      func(*testing.T, string) provider.Provider
+		expectPath    string
 	}{
 		{
 			name:        "openAI_no_base_path",
@@ -254,6 +255,15 @@ func TestPassthroughRoutesForProviders(t *testing.T) {
 			},
 			expectPath: "/_ping",
 		},
+		{
+			name:          "copilot_auto",
+			requestMethod: http.MethodPost,
+			requestPath:   "/copilot/auto",
+			provider: func(_ *testing.T, baseURL string) provider.Provider {
+				return aibridge.NewCopilotProvider(config.Copilot{BaseURL: baseURL})
+			},
+			expectPath: "/auto",
+		},
 	}
 
 	for _, tc := range tests {
@@ -274,7 +284,7 @@ func TestPassthroughRoutesForProviders(t *testing.T) {
 			bridge, err := aibridge.NewRequestBridge(t.Context(), []provider.Provider{prov}, &rec, nil, logger, nil, bridgeTestTracer)
 			require.NoError(t, err)
 
-			req := httptest.NewRequest("", tc.requestPath, nil)
+			req := httptest.NewRequest(tc.requestMethod, tc.requestPath, nil)
 			resp := httptest.NewRecorder()
 			bridge.ServeHTTP(resp, req)
 
@@ -311,7 +321,7 @@ func TestWebSocketUpgradeRejected(t *testing.T) {
 	bridge.ServeHTTP(resp, req)
 
 	assert.Equal(t, http.StatusNotImplemented, resp.Code)
-	assert.Contains(t, resp.Body.String(), "WebSocket transport is not supported; use HTTP")
+	assert.Contains(t, resp.Body.String(), "WebSocket transport is not supported, use HTTP")
 	assert.False(t, interceptorCalled)
 }
 

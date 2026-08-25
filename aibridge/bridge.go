@@ -263,7 +263,7 @@ func newInterceptionProcessor(p provider.Provider, cbs *circuitbreaker.ProviderC
 				fields = append(fields, slog.F("initiator_id", actor.ID))
 			}
 			logger.Debug(ctx, "rejecting unsupported WebSocket upgrade", fields...)
-			http.Error(w, "WebSocket transport is not supported; use HTTP", http.StatusNotImplemented)
+			http.Error(w, "WebSocket transport is not supported, use HTTP", http.StatusNotImplemented)
 			return
 		}
 
