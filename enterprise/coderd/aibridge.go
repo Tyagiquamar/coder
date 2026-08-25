@@ -1465,7 +1465,7 @@ func (api *API) groupMembersAISpend(rw http.ResponseWriter, r *http.Request) {
 			row.EffectiveSpendLimitMicros = sql.NullInt64{}
 			row.EffectiveLimitSource = sql.NullString{}
 		}
-		resp.Members = append(resp.Members, db2sdk.GroupMemberAISpend(row))
+		resp.Members = append(resp.Members, db2sdk.GroupMemberAISpend(row, group.ID))
 	}
 
 	httpapi.Write(ctx, rw, http.StatusOK, resp)

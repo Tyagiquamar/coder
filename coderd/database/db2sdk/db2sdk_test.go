@@ -29,9 +29,10 @@ func TestGroupMemberAISpend(t *testing.T) {
 	userID := uuid.New()
 	effectiveGroupID := uuid.New()
 	tests := []struct {
-		name string
-		row  database.GetGroupMembersAISpendRow
-		want codersdk.GroupMemberAISpend
+		name           string
+		row            database.GetGroupMembersAISpendRow
+		queriedGroupID uuid.UUID
+		want           codersdk.GroupMemberAISpend
 	}{
 		{
 			name: "EffectiveGroupIsQueriedGroup",
@@ -40,10 +41,9 @@ func TestGroupMemberAISpend(t *testing.T) {
 				EffectiveGroupID:          uuid.NullUUID{UUID: effectiveGroupID, Valid: true},
 				EffectiveSpendLimitMicros: sql.NullInt64{Int64: 2_000_000, Valid: true},
 				EffectiveLimitSource:      sql.NullString{String: "user_override", Valid: true},
-				GroupSpendLimitMicros:     sql.NullInt64{Int64: 2_000_000, Valid: true},
-				GroupLimitSource:          sql.NullString{String: "user_override", Valid: true},
 				GroupSpendMicros:          500_000,
 			},
+			queriedGroupID: effectiveGroupID,
 			want: codersdk.GroupMemberAISpend{
 				UserID:           userID,
 				EffectiveGroupID: &effectiveGroupID,
@@ -67,6 +67,7 @@ func TestGroupMemberAISpend(t *testing.T) {
 				EffectiveLimitSource:      sql.NullString{String: "group", Valid: true},
 				GroupSpendMicros:          250_000,
 			},
+			queriedGroupID: uuid.New(),
 			want: codersdk.GroupMemberAISpend{
 				UserID:           userID,
 				EffectiveGroupID: &effectiveGroupID,
@@ -83,6 +84,7 @@ func TestGroupMemberAISpend(t *testing.T) {
 				UserID:           userID,
 				EffectiveGroupID: uuid.NullUUID{UUID: effectiveGroupID, Valid: true},
 			},
+			queriedGroupID: uuid.New(),
 			want: codersdk.GroupMemberAISpend{
 				UserID:           userID,
 				EffectiveGroupID: &effectiveGroupID,
@@ -98,7 +100,7 @@ func TestGroupMemberAISpend(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tt.want, db2sdk.GroupMemberAISpend(tt.row))
+			require.Equal(t, tt.want, db2sdk.GroupMemberAISpend(tt.row, tt.queriedGroupID))
 		})
 	}
 }
