@@ -1740,12 +1740,8 @@ func testTool[Arg, Ret any](t *testing.T, tool toolsdk.Tool[Arg, Ret], tb toolsd
 	return ret, err
 }
 
-// TestEditFileTools_DecodeDeprecatedKeys pins the MCP decode side of
-// the rename compatibility (CODAGT-483): coder_workspace_edit_file(s)
-// advertised search/replace until this change, so an MCP client holding
-// a cached schema from before the upgrade still sends those keys.
-// Tool.Generic decodes the raw arguments into the typed args, and the
-// values must survive into FileEdit instead of being discarded.
+// TestEditFileTools_DecodeDeprecatedKeys pins that deprecated-key
+// MCP args survive decoding into the typed edit args (CODAGT-483).
 func TestEditFileTools_DecodeDeprecatedKeys(t *testing.T) {
 	t.Parallel()
 

@@ -1179,6 +1179,12 @@ func DefaultReadFileLinesLimits() ReadFileLinesLimits {
 	}
 }
 
+// FileEdit is a single old_text -> new_text replacement applied to
+// one file. The fields use old_text/new_text (not the earlier
+// search/replace) because models confused the direction
+// (CODAGT-312). MarshalJSON and UnmarshalJSON add the deprecated
+// search/replace keys for rollout compatibility; see those methods
+// for the removal condition.
 type FileEdit struct {
 	OldText    string `json:"old_text"`
 	NewText    string `json:"new_text"`
@@ -1188,7 +1194,8 @@ type FileEdit struct {
 // MarshalJSON emits both the current and the deprecated
 // "search"/"replace" keys so agents that predate the rename keep
 // decoding the request while coderd upgrades ahead of running
-// workspaces (CODAGT-483). Remove once every deployed agent decodes
+// workspaces (CODAGT-483). Remove in the first release after Coder
+// Agents GA (2026-09), once every deployed agent decodes
 // "old_text"/"new_text".
 func (e FileEdit) MarshalJSON() ([]byte, error) {
 	type wire FileEdit
@@ -1206,7 +1213,8 @@ func (e FileEdit) MarshalJSON() ([]byte, error) {
 // endpoint (CODAGT-483). The fallback applies only when both new
 // fields are empty, which identifies an old-wire caller; if either
 // new field is set, an explicitly empty value (e.g. new_text=""
-// for a deletion) is preserved. Remove once every caller sends
+// for a deletion) is preserved. Remove in the first release after
+// Coder Agents GA (2026-09), once every caller sends
 // "old_text"/"new_text".
 func (e *FileEdit) UnmarshalJSON(data []byte) error {
 	type wire FileEdit

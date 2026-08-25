@@ -13,7 +13,12 @@ export interface EditFilesFileEntry {
 
 // Validates that the edit has at least the shape of an object with
 // string-typed text fields. Accepts both current field names
-// (old_text/new_text) and deprecated names (search/replace).
+// (old_text/new_text) and the old names (search/replace).
+//
+// The search/replace branch is not a wire-compat shim to be removed
+// with the backend rollout. This parses tool-call args persisted from
+// pre-rename chats, which are immutable history; deleting the branch
+// would blank the edit diffs of old chats permanently.
 const normalizeEdit = (
 	e: unknown,
 ): { search: string; replace: string } | null => {

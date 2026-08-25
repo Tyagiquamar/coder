@@ -1299,10 +1299,9 @@ func TestHandleEditFiles_Failure_NoPathStoreUpdate(t *testing.T) {
 	require.Empty(t, paths)
 }
 
-// TestHandleEditFiles_DeprecatedFieldNames verifies the endpoint's
-// rollout fallback (CODAGT-483): old-coderd callers still sending
-// "search"/"replace" get the same edits applied, and when both key
-// sets are present the new names win.
+// TestHandleEditFiles_DeprecatedFieldNames verifies the endpoint
+// applies FileEdit's deprecated-key fallback over the wire
+// (CODAGT-483). Case names mirror TestFileEdit_UnmarshalAcceptsDeprecatedKeys.
 func TestHandleEditFiles_DeprecatedFieldNames(t *testing.T) {
 	t.Parallel()
 
@@ -1317,19 +1316,19 @@ func TestHandleEditFiles_DeprecatedFieldNames(t *testing.T) {
 		want   string
 	}{
 		{
-			name:   "OldKeysAccepted",
+			name:   "OldKeysOnly",
 			target: "old-keys.txt",
 			edit:   map[string]string{"search": "hello", "replace": "world"},
 			want:   "world",
 		},
 		{
-			name:   "NewKeysWinOverOld",
+			name:   "NewKeysWinWhenSet",
 			target: "both-keys.txt",
 			edit:   map[string]string{"old_text": "hello", "new_text": "new", "search": "hello", "replace": "old"},
 			want:   "new",
 		},
 		{
-			name:   "NewKeysEmptyNewTextNotOverwritten",
+			name:   "ExplicitEmptyNewTextPreserved",
 			target: "empty-new-text.txt",
 			edit:   map[string]string{"old_text": "hello", "new_text": "", "search": "hello", "replace": "junk"},
 			want:   "",
@@ -3288,13 +3287,10 @@ func TestFuzzyReplace_Expansion_PreservesFileIndent(t *testing.T) {
 	require.Equal(t, expected, string(data))
 }
 
-// baseFuzzyNotFoundMessage is the leading sentence the matcher
-// returns when all three passes miss. It must remain the leading
-// sentence even when diagnostic hints are appended, so existing log
-// scrapers continue to match.
-const baseFuzzyNotFoundMessage = "old_text not found in file. " +
-	"Verify that old_text matches the file content exactly, " +
-	"including whitespace and indentation"
+// baseFuzzyNotFoundMessage is the matcher's not-found base message,
+// exported from the package under test. The emitted text must keep
+// this sentence leading when diagnostic hints are appended.
+var baseFuzzyNotFoundMessage = agentfiles.ErrOldTextNotFound
 
 // TestFuzzyReplace_Hints exercises the post-fail diagnostic hints:
 // inversion (search and replace swapped) and miscount (one repeated

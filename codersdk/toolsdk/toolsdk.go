@@ -1963,11 +1963,15 @@ var WorkspaceEditFile = Tool[WorkspaceEditFileArgs, WorkspaceEditFilesResponse]{
 						"properties": map[string]any{
 							"old_text": map[string]any{
 								"type":        "string",
-								"description": "The existing text to replace.",
+								"description": "The existing text to replace. Must uniquely match exactly one location in the file unless replace_all is true. Include enough surrounding context to make the match unique.",
 							},
 							"new_text": map[string]any{
 								"type":        "string",
 								"description": "The new text that replaces the old text.",
+							},
+							"replace_all": map[string]any{
+								"type":        "boolean",
+								"description": "When true, replaces all occurrences of old_text. Defaults to false, which requires old_text to match exactly once.",
 							},
 						},
 						"required": []string{"old_text", "new_text"},

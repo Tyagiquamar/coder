@@ -30,6 +30,11 @@ type editFileEdits struct {
 
 // editFileEdit uses "old_text"/"new_text" instead of "search"/"replace"
 // because models confused the direction (CODAGT-312).
+//
+// This type must not be replaced by workspacesdk.FileEdit, whose
+// UnmarshalJSON accepts the deprecated search/replace keys for wire
+// compatibility: doing so would silently reopen deprecated-key
+// acceptance at the chat ingress.
 type editFileEdit struct {
 	OldText    string `json:"old_text" description:"Existing text in the file to replace. Matching is fuzzy: whitespace and indentation differences are tolerated."`
 	NewText    string `json:"new_text" description:"Text that replaces old_text."`

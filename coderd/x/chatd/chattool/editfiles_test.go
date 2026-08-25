@@ -595,7 +595,6 @@ func TestEditFiles_MapsOldTextNewTextToSDK(t *testing.T) {
 	mockConn := agentconnmock.NewMockAgentConn(ctrl)
 	targetPath := "/home/coder/main.go"
 
-	// The agent API should map old_text->OldText and new_text->NewText.
 	mockConn.EXPECT().
 		EditFiles(gomock.Any(), workspacesdk.FileEditRequest{
 			Files: []workspacesdk.FileEdits{{

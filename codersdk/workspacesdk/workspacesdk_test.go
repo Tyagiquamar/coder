@@ -149,9 +149,7 @@ func (f *fakeResolver) LookupIP(_ context.Context, network, host string) ([]net.
 // TestFileEdit_MarshalEmitsDeprecatedKeys pins the coderd->agent
 // wire compatibility (CODAGT-483): the request JSON must keep
 // carrying the pre-rename search/replace keys so running agents on
-// older versions decode edits while coderd upgrades first. Remove
-// it together with FileEdit.MarshalJSON once every deployed agent
-// decodes old_text/new_text.
+// older versions decode edits while coderd upgrades first.
 func TestFileEdit_MarshalEmitsDeprecatedKeys(t *testing.T) {
 	t.Parallel()
 
@@ -177,13 +175,7 @@ func TestFileEdit_MarshalEmitsDeprecatedKeys(t *testing.T) {
 }
 
 // TestFileEdit_UnmarshalAcceptsDeprecatedKeys pins the decode side
-// of the rename compatibility (CODAGT-483): callers still sending the
-// pre-rename search/replace keys keep working. The affected callers
-// are MCP clients with a cached schema for coder_workspace_edit_file(s)
-// (which advertised the old keys) and old-coderd versions calling the
-// agent /edit-files endpoint. The fallback applies only when both new
-// fields are empty, so an explicitly empty new_text deletion is never
-// overwritten.
+// of FileEdit's deprecated-key fallback (CODAGT-483).
 func TestFileEdit_UnmarshalAcceptsDeprecatedKeys(t *testing.T) {
 	t.Parallel()
 
@@ -211,6 +203,11 @@ func TestFileEdit_UnmarshalAcceptsDeprecatedKeys(t *testing.T) {
 			name: "ExplicitEmptyNewTextPreserved",
 			in:   `{"old_text":"o","new_text":"","search":"old","replace":"legacy"}`,
 			want: workspacesdk.FileEdit{OldText: "o", NewText: ""},
+		},
+		{
+			name: "OldKeysDeletion",
+			in:   `{"search":"old","replace":""}`,
+			want: workspacesdk.FileEdit{OldText: "old", NewText: ""},
 		},
 	}
 	for _, tt := range tests {

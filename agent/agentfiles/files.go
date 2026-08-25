@@ -1084,19 +1084,34 @@ func buildReplacementLines(matched, searchLines []string, replace, forcedEnding 
 	return b.String()
 }
 
-// fuzzyReplace attempts to find `search` inside `content` and replace it
-// with `replace`. It uses a cascading match strategy inspired by
-// openai/codex's apply_patch:
+// errOldTextAmbiguous is returned when the old_text matches more
+// than one location and replace_all is false. Shared by the
+// byte-level pass and the line-level passes so both spell the
+// remediation identically.
+const errOldTextAmbiguous = "old_text matches %d occurrences " +
+	"(expected exactly 1). Include more surrounding " +
+	"context to make the match unique, or set " +
+	"replace_all to true"
+
+// errOldTextNotFound is the leading sentence returned when all
+// match passes miss; diagnostic hints are appended after it.
+const errOldTextNotFound = "old_text not found in file. Verify that old_text " +
+	"matches the file content exactly, including whitespace " +
+	"and indentation"
+
+// fuzzyReplace attempts to find the edit's old_text inside content
+// and replace it with new_text. It uses a cascading match strategy
+// inspired by openai/codex's apply_patch:
 //
 //  1. Exact substring match (byte-for-byte).
 //  2. Line-by-line match ignoring trailing whitespace on each line.
 //  3. Line-by-line match ignoring all leading/trailing whitespace
 //     (indentation-tolerant).
 //
-// When edit.ReplaceAll is false (the default), the search string must
-// match exactly one location. If multiple matches are found, an error
-// is returned asking the caller to include more context or set
-// replace_all.
+// When edit.ReplaceAll is false (the default), the old_text must
+// match exactly one location. If multiple matches are found, an
+// error is returned asking the caller to include more context or
+// set replace_all.
 //
 // When a fuzzy match is found (passes 2 or 3), buildReplacementLines
 // emits the spliced output by per-position substitution at
@@ -1162,10 +1177,7 @@ func fuzzyReplace(content string, edit workspacesdk.FileEdit) (string, error) {
 		}
 		count := strings.Count(content, search)
 		if count > 1 {
-			return "", xerrors.Errorf("old_text matches %d occurrences "+
-				"(expected exactly 1). Include more "+
-				"context to make the match unique, or set "+
-				"replace_all to true", count)
+			return "", xerrors.Errorf(errOldTextAmbiguous, count)
 		}
 		// Exactly one match.
 		return strings.Replace(content, search, pass1Replace, 1), nil
@@ -1204,9 +1216,7 @@ func fuzzyReplace(content string, edit workspacesdk.FileEdit) (string, error) {
 		return result, err
 	}
 
-	msg := "old_text not found in file. Verify that old_text " +
-		"matches the file content exactly, including whitespace " +
-		"and indentation"
+	msg := errOldTextNotFound
 	// miscount takes precedence: a near-match means the search is the
 	// model's typo'd new text, not a swapped field. Emitting both can
 	// trick an agent into following the inversion hint and corrupting
@@ -1508,10 +1518,7 @@ func fuzzyReplaceLines(
 
 	if !replaceAll {
 		if count := countLineMatches(contentLines, searchLines, eq); count > 1 {
-			return "", true, xerrors.Errorf("old_text matches %d occurrences "+
-				"(expected exactly 1). Include more "+
-				"context to make the match unique, or set "+
-				"replace_all to true", count)
+			return "", true, xerrors.Errorf(errOldTextAmbiguous, count)
 		}
 		var b strings.Builder
 		for _, l := range contentLines[:start] {
