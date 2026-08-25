@@ -6556,7 +6556,7 @@ const docTemplate = `{
                     "Chats"
                 ],
                 "summary": "Get available AI model ACL users and groups",
-                "operationId": "get-available-ai-model-acl-users-groups",
+                "operationId": "get-available-ai-model-acl-users-and-groups",
                 "parameters": [
                     {
                         "type": "string",
