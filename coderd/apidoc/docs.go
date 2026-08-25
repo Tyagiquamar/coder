@@ -21395,7 +21395,7 @@ const docTemplate = `{
                     "format": "uuid"
                 },
                 "group_budget": {
-                    "description": "GroupBudget is the budget when the queried group is this user's\neffective budget source. When populated, it matches EffectiveBudget. Null\nwhen the user's budget resolves to another group or no budget applies.",
+                    "description": "GroupBudget is the budget when the queried group is this user's\neffective budget source. When populated, it matches EffectiveBudget. Null\nwhen the user's budget resolves to another group or no budget applies.\nDeprecated: Use EffectiveBudget instead.",
                     "allOf": [
                         {
                             "$ref": "#/definitions/codersdk.AIBudgetLimit"
