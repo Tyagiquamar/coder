@@ -858,6 +858,11 @@ export type APIKeyScope =
 	| "user:*"
 	| "user:create"
 	| "user:delete"
+	| "user_memory:*"
+	| "user_memory:create"
+	| "user_memory:delete"
+	| "user_memory:read"
+	| "user_memory:update"
 	| "user:read"
 	| "user:read_personal"
 	| "user_secret:*"
@@ -1110,6 +1115,11 @@ export const APIKeyScopes: APIKeyScope[] = [
 	"user:*",
 	"user:create",
 	"user:delete",
+	"user_memory:*",
+	"user_memory:create",
+	"user_memory:delete",
+	"user_memory:read",
+	"user_memory:update",
 	"user:read",
 	"user:read_personal",
 	"user_secret:*",
@@ -7957,6 +7967,7 @@ export type RBACResource =
 	| "template"
 	| "usage_event"
 	| "user"
+	| "user_memory"
 	| "user_secret"
 	| "user_skill"
 	| "webpush_subscription"
@@ -8012,6 +8023,7 @@ export const RBACResources: RBACResource[] = [
 	"template",
 	"usage_event",
 	"user",
+	"user_memory",
 	"user_secret",
 	"user_skill",
 	"webpush_subscription",
@@ -8136,6 +8148,7 @@ export type ResourceType =
 	| "api_key"
 	| "chat"
 	| "chat_instruction_settings"
+	| "chat_memory"
 	| "chat_model_config"
 	| "chat_operational_settings"
 	| "convert_login"
@@ -8162,6 +8175,7 @@ export type ResourceType =
 	| "template_version"
 	| "user"
 	| "user_ai_budget_override"
+	| "user_memory"
 	| "user_secret"
 	| "user_skill"
 	| "workspace"
@@ -8178,6 +8192,7 @@ export const ResourceTypes: ResourceType[] = [
 	"api_key",
 	"chat",
 	"chat_instruction_settings",
+	"chat_memory",
 	"chat_model_config",
 	"chat_operational_settings",
 	"convert_login",
@@ -8204,6 +8219,7 @@ export const ResourceTypes: ResourceType[] = [
 	"template_version",
 	"user",
 	"user_ai_budget_override",
+	"user_memory",
 	"user_secret",
 	"user_skill",
 	"workspace",
